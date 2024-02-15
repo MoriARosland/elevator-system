@@ -10,7 +10,7 @@ import (
 )
 
 const LISTEN_TIMEOUT = 50
-const BUFF_SIZE = 2
+const BUF_SIZE = 2
 
 /*
  * Recursivly monitors the other nodes.
@@ -60,7 +60,7 @@ func monitorNext(
 			deadline := time.Now().Add(LISTEN_TIMEOUT * time.Millisecond)
 			pc.SetReadDeadline(deadline)
 
-			buf := make([]byte, BUFF_SIZE)
+			buf := make([]byte, BUF_SIZE)
 
 			// TODO: second return value can be used to get IP of the sender
 			_, _, err := pc.ReadFrom(buf)
