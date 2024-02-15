@@ -1,27 +1,43 @@
 package main
 
 import (
-	"Driver-go/elevio"
-	"elevator/pack"
+	"elevator/elevator"
+	"elevator/network"
+	"errors"
+	"flag"
+	"fmt"
 )
 
 func main() {
 	/*
-	 * Demonstrates that the elevator driver import works
-	 * Will only work when elevator server is running on specified address
+	 * Read command line arguments
 	 */
-	numFloors := 4
-	elevServerAddr := "localhost"
+	nodeID := flag.Int("id", -1, "Node id")
+	numNodes := flag.Int("num", -1, "Number of nodes")
+	basePort := flag.Int("port", -1, "Base broadcasting port")
 
-	elevio.Init(elevServerAddr, numFloors)
+	flag.Parse()
+
+	if *nodeID < 0 || *numNodes < 0 || *basePort < 0 {
+		panic(errors.New("missing flags"))
+	}
 
 	/*
-	 * Function declared inside main package, but in diffrent file
+	 * Initiate elevator state
 	 */
-	test()
+	elevator, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
+
+	if err != nil {
+		panic(err)
+	}
 
 	/*
-	 * Function declared in pack (test package)
+	 * Clear terminal window
 	 */
-	pack.Test()
+	fmt.Print("\033[2J")
+
+	go network.Broadcast(*basePort + elevator.NodeID)
+	go network.NextWatchDog(*nodeID, *numNodes, *basePort)
+
+	select {}
 }
