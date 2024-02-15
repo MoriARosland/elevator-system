@@ -13,7 +13,7 @@ const LISTEN_TIMEOUT = 50
 const BUF_SIZE = 2
 
 /*
- * Recursivly monitors the other nodes.
+ * Recursively monitors the other nodes.
  * The closest (forward in the circle) node that is
  * alive is updated on the updateCurrentNext channel.
  */
