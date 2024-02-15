@@ -3,9 +3,9 @@ package main
 import (
 	"elevator/elevator"
 	"elevator/network"
-	"errors"
 	"flag"
 	"fmt"
+	"os"
 )
 
 func main() {
@@ -19,7 +19,8 @@ func main() {
 	flag.Parse()
 
 	if *nodeID < 0 || *numNodes < 0 || *basePort < 0 {
-		panic(errors.New("missing flags"))
+		fmt.Println("Missing flags, use flag -h to see usage")
+		os.Exit(1)
 	}
 
 	/*
