@@ -37,7 +37,7 @@ func main() {
 	 */
 	fmt.Print("\033[2J")
 
-	go network.Broadcast(*basePort + elevator.NodeID)
+	go network.Broadcast(elevator.BroadCastPort)
 	go network.NextWatchDog(*nodeID, *numNodes, *basePort)
 
 	select {}

@@ -36,12 +36,12 @@ func monitorNext(
 
 	destroySubroutine := make(chan bool)
 
-	pc, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", basePort+nextNodeID))
+	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", basePort+nextNodeID))
 
 	if err != nil {
 		panic(err)
 	}
-	defer pc.Close()
+	defer packetConnection.Close()
 
 	for {
 		select {
@@ -58,12 +58,12 @@ func monitorNext(
 		 */
 		default:
 			deadline := time.Now().Add(LISTEN_TIMEOUT * time.Millisecond)
-			pc.SetReadDeadline(deadline)
+			packetConnection.SetReadDeadline(deadline)
 
 			buf := make([]byte, BUF_SIZE)
 
 			// TODO: second return value can be used to get IP of the sender
-			_, _, err := pc.ReadFrom(buf)
+			_, _, err := packetConnection.ReadFrom(buf)
 
 			/*
 			 * UDP read successful, the next node is alive
