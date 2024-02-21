@@ -1,7 +1,7 @@
 package network
 
 import (
-	"encoding/binary"
+	"elevator/elevator"
 	"fmt"
 	"net"
 	"time"
@@ -9,8 +9,8 @@ import (
 	"github.com/libp2p/go-reuseport"
 )
 
-const LISTEN_TIMEOUT = 1000
-const BUF_SIZE = 4
+const LISTEN_TIMEOUT = 30
+const BUF_SIZE = 2
 
 /*
  * Recursively monitors the other nodes.
@@ -23,7 +23,7 @@ func MonitorNext(
 	basePort int,
 	nextNodeID int,
 	selfDestruct chan bool,
-	updateCurrentNext chan string,
+	updateNextNode chan elevator.Next,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
@@ -68,8 +68,6 @@ func MonitorNext(
 
 			_, addr, err := packetConnection.ReadFrom(buf)
 
-			received := binary.BigEndian.Uint32(buf)
-
 			/*
 			 * UDP read successful, the next node is alive
 			 */
@@ -79,7 +77,7 @@ func MonitorNext(
 					hasSubroutine = false
 				}
 
-				updateCurrentNext <- fmt.Sprintf("%s - %d", addr.String(), received)
+				updateNextNode <- elevator.Next{ID: nextNodeID, Addr: addr.String()}
 				break
 			}
 
@@ -100,11 +98,11 @@ func MonitorNext(
 						nextNextNodeID = nextNodeID + 1
 					}
 
-					go MonitorNext(nodeID, numNodes, basePort, nextNextNodeID, destroySubroutine, updateCurrentNext)
+					go MonitorNext(nodeID, numNodes, basePort, nextNextNodeID, destroySubroutine, updateNextNode)
 					hasSubroutine = true
 				}
 
-				updateCurrentNext <- ""
+				updateNextNode <- elevator.Next{ID: -1, Addr: ""}
 				break
 			}
 

@@ -26,7 +26,7 @@ func main() {
 	/*
 	 * Initiate elevator state
 	 */
-	elevator, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
+	elevState, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
 
 	if err != nil {
 		panic(err)
@@ -37,45 +37,48 @@ func main() {
 	 */
 	fmt.Print("\033[2J")
 
-	go network.Broadcast(elevator.BroadCastPort)
+	go network.Broadcast(elevState.BroadCastPort)
 
 	/*
 	 * Monitor next nodes and update NextNodeAddr
 	 */
 	var nextNodeID int
 
-	if elevator.NodeID+1 >= elevator.NumNodes {
+	if elevState.NodeID+1 >= elevState.NumNodes {
 		nextNodeID = 0
 	} else {
-		nextNodeID = elevator.NodeID + 1
+		nextNodeID = elevState.NodeID + 1
 	}
 
-	updateCurrentNextAddr := make(chan string)
+	fmt.Println(nextNodeID)
+
+	updateNextNode := make(chan elevator.Next)
 
 	go network.MonitorNext(
-		elevator.NodeID,
-		elevator.NumNodes,
-		elevator.BroadCastPort,
+		elevState.NodeID,
+		elevState.NumNodes,
+		*basePort,
 		nextNodeID,
 		make(chan bool),
-		updateCurrentNextAddr,
+		updateNextNode,
 	)
 
 	for {
 		select {
-		case newNextNodeAddr := <-updateCurrentNextAddr:
-			elevator.NextNodeAddr = newNextNodeAddr
+		case newNextNode := <-updateNextNode:
+			elevState.Next = newNextNode
 
 			/*
 			 * Temporary display id and next node
 			 */
 			fmt.Print("\033[J\033[2;0H\r  ")
-			fmt.Printf("ID: %d | Broadcasting: %d | Next: %s ", elevator.NodeID, elevator.BroadCastPort, elevator.NextNodeAddr)
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevState.NodeID, elevState.Next.ID, elevState.Next.Addr)
 
 		default:
 			/*
 			 * For now, do nothing
 			 */
+			continue
 		}
 	}
 }

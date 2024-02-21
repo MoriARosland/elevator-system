@@ -1,7 +1,6 @@
 package network
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
 	"time"
@@ -29,14 +28,10 @@ func Broadcast(port int) {
 		panic(err)
 	}
 
-	buf := make([]byte, 4)
-
 	for {
 		time.Sleep(BROADCAST_INTERVAL * time.Millisecond)
 
-		binary.BigEndian.PutUint32(buf, uint32(port))
-
-		_, err := packetConnection.WriteTo(buf, addr)
+		_, err := packetConnection.WriteTo([]byte(""), addr)
 
 		if err != nil {
 			panic(err)
