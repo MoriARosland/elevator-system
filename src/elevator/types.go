@@ -9,5 +9,5 @@ type Elevator struct {
 	NodeID        int
 	NumNodes      int
 	BroadCastPort int
-	NextNode          NextNode
+	NextNode      NextNode
 }
