@@ -1,6 +1,6 @@
 package elevator
 
-type Next struct {
+type NextNode struct {
 	ID   int
 	Addr string
 }
@@ -9,5 +9,5 @@ type Elevator struct {
 	NodeID        int
 	NumNodes      int
 	BroadCastPort int
-	Next          Next
+	NextNode          NextNode
 }

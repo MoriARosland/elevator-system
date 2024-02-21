@@ -15,15 +15,15 @@ const BUF_SIZE = 2
 /*
  * Recursively monitors the other nodes.
  * The closest (forward in the circle) node that is
- * alive is updated on the updateCurrentNext channel.
+ * alive is updated on the updateNextNode channel.
  */
-func MonitorNext(
+func MonitorNextNode(
 	nodeID int,
 	numNodes int,
 	basePort int,
 	nextNodeID int,
 	selfDestruct chan bool,
-	updateNextNode chan elevator.Next,
+	updateNextNode chan elevator.NextNode,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
@@ -77,7 +77,7 @@ func MonitorNext(
 					hasSubroutine = false
 				}
 
-				updateNextNode <- elevator.Next{ID: nextNodeID, Addr: addr.String()}
+				updateNextNode <- elevator.NextNode{ID: nextNodeID, Addr: addr.String()}
 				break
 			}
 
@@ -98,11 +98,11 @@ func MonitorNext(
 						nextNextNodeID = nextNodeID + 1
 					}
 
-					go MonitorNext(nodeID, numNodes, basePort, nextNextNodeID, destroySubroutine, updateNextNode)
+					go MonitorNextNode(nodeID, numNodes, basePort, nextNextNodeID, destroySubroutine, updateNextNode)
 					hasSubroutine = true
 				}
 
-				updateNextNode <- elevator.Next{ID: -1, Addr: ""}
+				updateNextNode <- elevator.NextNode{ID: -1, Addr: ""}
 				break
 			}
 

@@ -50,9 +50,9 @@ func main() {
 		nextNodeID = elevState.NodeID + 1
 	}
 
-	updateNextNode := make(chan elevator.Next)
+	updateNextNode := make(chan elevator.NextNode)
 
-	go network.MonitorNext(
+	go network.MonitorNextNode(
 		elevState.NodeID,
 		elevState.NumNodes,
 		*basePort,
@@ -64,13 +64,13 @@ func main() {
 	for {
 		select {
 		case newNextNode := <-updateNextNode:
-			elevState.Next = newNextNode
+			elevState.NextNode = newNextNode
 
 			/*
 			 * Temporary display id and next node
 			 */
 			fmt.Print("\033[J\033[2;0H\r  ")
-			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevState.NodeID, elevState.Next.ID, elevState.Next.Addr)
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevState.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
 
 		default:
 			/*
