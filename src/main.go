@@ -38,7 +38,44 @@ func main() {
 	fmt.Print("\033[2J")
 
 	go network.Broadcast(elevator.BroadCastPort)
-	go network.NextWatchDog(*nodeID, *numNodes, *basePort)
 
-	select {}
+	/*
+	 * Monitor next nodes and update NextNodeAddr
+	 */
+	var nextNodeID int
+
+	if elevator.NodeID+1 >= elevator.NumNodes {
+		nextNodeID = 0
+	} else {
+		nextNodeID = elevator.NodeID + 1
+	}
+
+	updateCurrentNextAddr := make(chan string)
+
+	go network.MonitorNext(
+		elevator.NodeID,
+		elevator.NumNodes,
+		elevator.BroadCastPort,
+		nextNodeID,
+		make(chan bool),
+		updateCurrentNextAddr,
+	)
+
+	for {
+		select {
+		case newNextNodeAddr := <-updateCurrentNextAddr:
+			elevator.NextNodeAddr = newNextNodeAddr
+
+			/*
+			 * Temporary display id and next node
+			 */
+			fmt.Print("\033[J\033[2;0H\r  ")
+			fmt.Printf("ID: %d | Broadcasting: %d | Next: %s ", elevator.NodeID, elevator.BroadCastPort, elevator.NextNodeAddr)
+
+		default:
+			/*
+			 * For now, do nothing
+			 */
+		}
+	}
 }

@@ -1,29 +1,42 @@
 package network
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/libp2p/go-reuseport"
 )
 
-const BROADCAST_ADDR = "255.255.255.255"
+const BROADCAST_IP = "255.255.255.255"
 const BROADCAST_INTERVAL = 10
 
 /*
  * Broadcasts "I'm alive" on specified port.
  */
 func Broadcast(port int) {
-	conn, err := net.Dial("udp4", fmt.Sprintf("%s:%d", BROADCAST_ADDR, port))
+	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", port))
 
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
+	defer packetConnection.Close()
+
+	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", BROADCAST_IP, port))
+
+	if err != nil {
+		panic(err)
+	}
+
+	buf := make([]byte, 4)
 
 	for {
 		time.Sleep(BROADCAST_INTERVAL * time.Millisecond)
 
-		_, err := conn.Write([]byte(""))
+		binary.BigEndian.PutUint32(buf, uint32(port))
+
+		_, err := packetConnection.WriteTo(buf, addr)
 
 		if err != nil {
 			panic(err)
