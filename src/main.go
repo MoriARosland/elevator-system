@@ -50,8 +50,6 @@ func main() {
 		nextNodeID = elevState.NodeID + 1
 	}
 
-	fmt.Println(nextNodeID)
-
 	updateNextNode := make(chan elevator.Next)
 
 	go network.MonitorNext(
