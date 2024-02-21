@@ -24,6 +24,11 @@ func main() {
 	}
 
 	/*
+	 * Clear terminal window
+	 */
+	fmt.Print("\033[2J")
+
+	/*
 	 * Initiate elevator state
 	 */
 	elevState, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
@@ -32,15 +37,10 @@ func main() {
 		panic(err)
 	}
 
-	/*
-	 * Clear terminal window
-	 */
-	fmt.Print("\033[2J")
-
 	go network.Broadcast(elevState.BroadCastPort)
 
 	/*
-	 * Monitor next nodes and update NextNodeAddr
+	 * Monitor next nodes and update NextNode in elevState
 	 */
 	var nextNodeID int
 

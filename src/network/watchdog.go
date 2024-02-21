@@ -89,6 +89,10 @@ func MonitorNextNode(
 					break
 				}
 
+				/*
+				 * If we have not come full circle:
+				 * spawn new subroutine to monitor the "next" nextNode
+				 */
 				if nextNodeID != prevNodeID {
 					var nextNextNodeID int
 
@@ -98,7 +102,14 @@ func MonitorNextNode(
 						nextNextNodeID = nextNodeID + 1
 					}
 
-					go MonitorNextNode(nodeID, numNodes, basePort, nextNextNodeID, destroySubroutine, updateNextNode)
+					go MonitorNextNode(
+						nodeID,
+						numNodes,
+						basePort,
+						nextNextNodeID,
+						destroySubroutine,
+						updateNextNode,
+					)
 					hasSubroutine = true
 				}
 
