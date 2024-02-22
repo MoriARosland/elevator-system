@@ -1,29 +1,29 @@
 package network
 
 import (
+	"elevator/elevator"
 	"fmt"
 	"net"
-	"runtime"
 	"time"
 
 	"github.com/libp2p/go-reuseport"
 )
 
-const LISTEN_TIMEOUT = 50
+const LISTEN_TIMEOUT = 30
 const BUF_SIZE = 2
 
 /*
  * Recursively monitors the other nodes.
  * The closest (forward in the circle) node that is
- * alive is updated on the updateCurrentNext channel.
+ * alive is updated on the updateNextNode channel.
  */
-func monitorNext(
+func MonitorNextNode(
 	nodeID int,
-	nextNodeID int,
 	numNodes int,
 	basePort int,
+	nextNodeID int,
 	selfDestruct chan bool,
-	updateCurrentNext chan int,
+	updateNextNode chan elevator.NextNode,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
@@ -35,8 +35,10 @@ func monitorNext(
 	}
 
 	destroySubroutine := make(chan bool)
+	buf := make([]byte, BUF_SIZE)
 
-	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", basePort+nextNodeID))
+	nextNodePort := basePort + nextNodeID
+	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", nextNodePort))
 
 	if err != nil {
 		panic(err)
@@ -58,12 +60,13 @@ func monitorNext(
 		 */
 		default:
 			deadline := time.Now().Add(LISTEN_TIMEOUT * time.Millisecond)
-			packetConnection.SetReadDeadline(deadline)
+			err := packetConnection.SetReadDeadline(deadline)
 
-			buf := make([]byte, BUF_SIZE)
+			if err != nil {
+				panic(err)
+			}
 
-			// TODO: second return value can be used to get IP of the sender
-			_, _, err := packetConnection.ReadFrom(buf)
+			_, addr, err := packetConnection.ReadFrom(buf)
 
 			/*
 			 * UDP read successful, the next node is alive
@@ -74,7 +77,7 @@ func monitorNext(
 					hasSubroutine = false
 				}
 
-				updateCurrentNext <- nextNodeID
+				updateNextNode <- elevator.NextNode{ID: nextNodeID, Addr: addr.String()}
 				break
 			}
 
@@ -86,6 +89,10 @@ func monitorNext(
 					break
 				}
 
+				/*
+				 * If we have not come full circle:
+				 * spawn new subroutine to monitor the "next" nextNode
+				 */
 				if nextNodeID != prevNodeID {
 					var nextNextNodeID int
 
@@ -95,43 +102,22 @@ func monitorNext(
 						nextNextNodeID = nextNodeID + 1
 					}
 
-					go monitorNext(nodeID, nextNextNodeID, numNodes, basePort, destroySubroutine, updateCurrentNext)
+					go MonitorNextNode(
+						nodeID,
+						numNodes,
+						basePort,
+						nextNextNodeID,
+						destroySubroutine,
+						updateNextNode,
+					)
 					hasSubroutine = true
 				}
 
-				updateCurrentNext <- -1
+				updateNextNode <- elevator.NextNode{ID: -1, Addr: ""}
 				break
 			}
 
 			panic(err)
 		}
-	}
-}
-
-/*
- * Monitor and print next nodes
- * TODO: move current next state to main function,
- * pass it out on a channel
- */
-func NextWatchDog(nodeID int, numNodes int, basePort int) {
-	var nextNode int
-
-	if nodeID+1 >= numNodes {
-		nextNode = 0
-	} else {
-		nextNode = nodeID + 1
-	}
-
-	currentNextNode := nextNode
-	updateCurrentNext := make(chan int)
-
-	go monitorNext(nodeID, nextNode, numNodes, basePort, make(chan bool), updateCurrentNext)
-
-	for {
-		fmt.Print("\033[J\033[2;0H\r  ")
-		fmt.Printf("ID: %d | Next: %d | Routines: %d \n  ", nodeID, currentNextNode, runtime.NumGoroutine())
-
-		newNextID := <-updateCurrentNext
-		currentNextNode = newNextID
 	}
 }
