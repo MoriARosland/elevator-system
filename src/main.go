@@ -24,21 +24,59 @@ func main() {
 	}
 
 	/*
+	 * Clear terminal window
+	 */
+	fmt.Print("\033[2J")
+
+	/*
 	 * Initiate elevator state
 	 */
-	elevator, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
+	elevState, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
 
 	if err != nil {
 		panic(err)
 	}
 
+	go network.Broadcast(elevState.BroadCastPort)
+
 	/*
-	 * Clear terminal window
+	 * Monitor next nodes and update NextNode in elevState
 	 */
-	fmt.Print("\033[2J")
+	var nextNodeID int
 
-	go network.Broadcast(elevator.BroadCastPort)
-	go network.NextWatchDog(*nodeID, *numNodes, *basePort)
+	if elevState.NodeID+1 >= elevState.NumNodes {
+		nextNodeID = 0
+	} else {
+		nextNodeID = elevState.NodeID + 1
+	}
 
-	select {}
+	updateNextNode := make(chan elevator.NextNode)
+
+	go network.MonitorNextNode(
+		elevState.NodeID,
+		elevState.NumNodes,
+		*basePort,
+		nextNodeID,
+		make(chan bool),
+		updateNextNode,
+	)
+
+	for {
+		select {
+		case newNextNode := <-updateNextNode:
+			elevState.NextNode = newNextNode
+
+			/*
+			 * Temporary display id and next node
+			 */
+			fmt.Print("\033[J\033[2;0H\r  ")
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevState.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
+
+		default:
+			/*
+			 * For now, do nothing
+			 */
+			continue
+		}
+	}
 }
