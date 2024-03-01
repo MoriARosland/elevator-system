@@ -9,7 +9,7 @@ import (
 )
 
 const Broadcast_IP = "255.255.255.255"
-const Broadcast_INTERVAL = 500
+const Broadcast_INTERVAL = 100
 
 /*
  * Broadcasts "I'm alive" on specified port.

@@ -5,6 +5,8 @@ import (
 	"elevator/elev"
 	"elevator/fsm"
 	"elevator/network"
+	"elevator/timer"
+	"elevator/types"
 	"flag"
 	"fmt"
 	"os"
@@ -54,8 +56,6 @@ func main() {
 	 */
 	elevState := elev.InitState(elevConfig.NumFloors)
 
-	fmt.Println(elevState.Requests)
-
 	/*
 	 * Initiate elevator driver and elevator polling
 	 */
@@ -94,7 +94,7 @@ func main() {
 		nextNodeID = elevConfig.NodeID + 1
 	}
 
-	updateNextNode := make(chan elev.NextNode)
+	updateNextNode := make(chan types.NextNode)
 
 	go network.MonitorNextNode(
 		elevConfig.NodeID,
@@ -110,26 +110,32 @@ func main() {
 		case newNextNode := <-updateNextNode:
 			elevState.NextNode = newNextNode
 
+			/*
+			 * Temporary display id and next node
+			 */
+			fmt.Print("\033[J\033[2;0H\r  ")
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevConfig.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
+
 		case buttonPress := <-drvButtons:
-			fsm.OnRequestButtonPress(buttonPress, elevState)
+			fsm.OnRequestButtonPress(buttonPress, elevState, elevConfig)
 
 		case newCurrentFloor := <-drvFloors:
-			fsm.OnFloorArrival(newCurrentFloor, elevState)
+			fsm.OnFloorArrival(newCurrentFloor, elevState, elevConfig)
 
 		case isObstructed := <-drvObstr:
-			/*
-			 * isObstructed ? reset door timer
-			 */
-			fmt.Println("Obstruction: ", isObstructed)
-
-		/*
-		 * TODO: create door timer
-		 */
+			timer.Start(elevConfig.DoorOpenDuration)
+			elevState.DoorObstr = isObstructed
 
 		default:
-			/*
-			 * For now, do nothing
-			 */
+			if timer.TimedOut() {
+				if elevState.DoorObstr {
+					timer.Start(elevConfig.DoorOpenDuration)
+					continue
+				}
+
+				timer.Stop()
+				fsm.OnDoorTimeout(elevState, elevConfig)
+			}
 			continue
 		}
 	}

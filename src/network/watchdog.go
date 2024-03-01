@@ -1,7 +1,7 @@
 package network
 
 import (
-	"elevator/elev"
+	"elevator/types"
 	"fmt"
 	"net"
 	"time"
@@ -9,7 +9,7 @@ import (
 	"github.com/libp2p/go-reuseport"
 )
 
-const LISTEN_TIMEOUT = 1500
+const LISTEN_TIMEOUT = 300
 const BUF_SIZE = 2
 
 /*
@@ -23,7 +23,7 @@ func MonitorNextNode(
 	basePort int,
 	nextNodeID int,
 	selfDestruct chan bool,
-	updateNextNode chan elev.NextNode,
+	updateNextNode chan types.NextNode,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
@@ -77,7 +77,7 @@ func MonitorNextNode(
 					hasSubroutine = false
 				}
 
-				updateNextNode <- elev.NextNode{ID: nextNodeID, Addr: addr.String()}
+				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
 				break
 			}
 
@@ -113,7 +113,7 @@ func MonitorNextNode(
 					hasSubroutine = true
 				}
 
-				updateNextNode <- elev.NextNode{ID: -1, Addr: ""}
+				updateNextNode <- types.NextNode{ID: -1, Addr: ""}
 				break
 			}
 
