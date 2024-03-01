@@ -1,12 +1,17 @@
 package main
 
 import (
-	"elevator/elevator"
+	"Driver-go/elevio"
+	"elevator/elev"
+	"elevator/fsm"
 	"elevator/network"
 	"flag"
 	"fmt"
 	"os"
 )
+
+const NUM_FLOORS = 4
+const DOOR_OPEN_DURATION = 3000
 
 func main() {
 	/*
@@ -14,11 +19,12 @@ func main() {
 	 */
 	nodeID := flag.Int("id", -1, "Node id")
 	numNodes := flag.Int("num", -1, "Number of nodes")
-	basePort := flag.Int("port", -1, "Base broadcasting port")
+	baseBroadcastPort := flag.Int("bport", -1, "Base Broadcasting port")
+	elevServerPort := flag.Int("sport", -1, "Elevator server port")
 
 	flag.Parse()
 
-	if *nodeID < 0 || *numNodes < 0 || *basePort < 0 {
+	if *nodeID < 0 || *numNodes < 0 || *baseBroadcastPort < 0 || *elevServerPort < 0 {
 		fmt.Println("Missing flags, use flag -h to see usage")
 		os.Exit(1)
 	}
@@ -29,33 +35,71 @@ func main() {
 	fmt.Print("\033[2J")
 
 	/*
-	 * Initiate elevator state
+	 * Initiate elevator config
 	 */
-	elevState, err := elevator.InitElevator(*nodeID, *numNodes, *basePort)
+	elevConfig, err := elev.InitConfig(
+		*nodeID,
+		*numNodes,
+		NUM_FLOORS,
+		DOOR_OPEN_DURATION,
+		*baseBroadcastPort,
+	)
 
 	if err != nil {
 		panic(err)
 	}
 
-	go network.Broadcast(elevState.BroadCastPort)
+	/*
+	 * Initiate elevator state
+	 */
+	elevState := elev.InitState(elevConfig.NumFloors)
+
+	fmt.Println(elevState.Requests)
 
 	/*
-	 * Monitor next nodes and update NextNode in elevState
+	 * Initiate elevator driver and elevator polling
+	 */
+	elevio.Init(fmt.Sprintf("localhost:%d", *elevServerPort), NUM_FLOORS)
+
+	drvButtons := make(chan elevio.ButtonEvent)
+	drvFloors := make(chan int)
+	drvObstr := make(chan bool)
+
+	go elevio.PollButtons(drvButtons)
+	go elevio.PollFloorSensor(drvFloors)
+	go elevio.PollObstructionSwitch(drvObstr)
+
+	currentFloor := elevio.GetFloor()
+
+	if 0 > currentFloor {
+		elevio.SetMotorDirection(elevio.MD_Down)
+		elevState.Dirn = elevio.MD_Down
+
+		fsm.OnInitBetweenFloors()
+	}
+
+	/*
+	 * Start "I'm alive" broadcasting
+	 */
+	go network.Broadcast(elevConfig.BroadcastPort)
+
+	/*
+	 * Monitor next nodes and update NextNode in elevConfig
 	 */
 	var nextNodeID int
 
-	if elevState.NodeID+1 >= elevState.NumNodes {
+	if elevConfig.NodeID+1 >= elevConfig.NumNodes {
 		nextNodeID = 0
 	} else {
-		nextNodeID = elevState.NodeID + 1
+		nextNodeID = elevConfig.NodeID + 1
 	}
 
-	updateNextNode := make(chan elevator.NextNode)
+	updateNextNode := make(chan elev.NextNode)
 
 	go network.MonitorNextNode(
-		elevState.NodeID,
-		elevState.NumNodes,
-		*basePort,
+		elevConfig.NodeID,
+		elevConfig.NumNodes,
+		*baseBroadcastPort,
 		nextNodeID,
 		make(chan bool),
 		updateNextNode,
@@ -66,11 +110,21 @@ func main() {
 		case newNextNode := <-updateNextNode:
 			elevState.NextNode = newNextNode
 
+		case buttonPress := <-drvButtons:
+			fsm.OnRequestButtonPress(buttonPress, elevState)
+
+		case newCurrentFloor := <-drvFloors:
+			fsm.OnFloorArrival(newCurrentFloor, elevState)
+
+		case isObstructed := <-drvObstr:
 			/*
-			 * Temporary display id and next node
+			 * isObstructed ? reset door timer
 			 */
-			fmt.Print("\033[J\033[2;0H\r  ")
-			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevState.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
+			fmt.Println("Obstruction: ", isObstructed)
+
+		/*
+		 * TODO: create door timer
+		 */
 
 		default:
 			/*
