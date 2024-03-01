@@ -61,6 +61,18 @@ func main() {
 		updateNextNode,
 	)
 
+	localIP, err := network.LocalIP()
+
+	if err != nil {
+		fmt.Println(err)
+		localIP = "DISCONNECTED"
+	}
+
+	incomingMessageChannel := make(chan []byte)
+
+	go network.ListenForMessages(localIP, 8080, incomingMessageChannel)
+	go network.SendUDPMessages(localIP, 8080)
+
 	for {
 		select {
 		case newNextNode := <-updateNextNode:
@@ -72,6 +84,8 @@ func main() {
 			fmt.Print("\033[J\033[2;0H\r  ")
 			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevState.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
 
+		case message := <-incomingMessageChannel:
+			fmt.Println(string(message))
 		default:
 			/*
 			 * For now, do nothing
