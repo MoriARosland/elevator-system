@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-BUFFER_SIZE := 1024
+const BUFFER_SIZE = 1024
 
 /*
 Listen for incoming messages on specified IP and port.
