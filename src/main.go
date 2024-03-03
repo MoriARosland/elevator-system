@@ -70,8 +70,7 @@ func main() {
 
 	incomingMessageChannel := make(chan []byte)
 
-	go network.ListenForMessages(localIP, 8080, incomingMessageChannel)
-	go network.SendUDPMessages(localIP, 8080)
+	go network.ListenForMessages(localIP, elevState.BroadCastPort, incomingMessageChannel)
 
 	for {
 		select {
@@ -86,6 +85,7 @@ func main() {
 
 		case message := <-incomingMessageChannel:
 			fmt.Println(string(message))
+
 		default:
 			/*
 			 * For now, do nothing
