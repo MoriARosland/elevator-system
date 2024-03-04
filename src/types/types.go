@@ -32,9 +32,10 @@ type ElevConfig struct {
 }
 
 type ElevState struct {
-	Floor     int
-	Dirn      elevio.MotorDirection
-	DoorObstr bool
-	Requests  [][]bool
-	NextNode  NextNode
+	Floor           int
+	Dirn            elevio.MotorDirection
+	DoorObstr       bool
+	Requests        [][]bool
+	NextNode        NextNode
+	WaitingForReply bool
 }
