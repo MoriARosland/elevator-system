@@ -22,8 +22,8 @@ func MonitorNextNode(
 	numNodes int,
 	basePort int,
 	nextNodeID int,
-	selfDestruct chan bool,
-	updateNextNode chan types.NextNode,
+	selfDestruct <-chan bool,
+	updateNextNode chan<- types.NextNode,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
