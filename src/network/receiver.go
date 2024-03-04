@@ -1,18 +1,18 @@
 package network
 
 import (
-	"net"
-	"strconv"
-	"time"
+	"fmt"
+
+	"github.com/libp2p/go-reuseport"
 )
 
 const BUFFER_SIZE = 1024
 
 /*
-Listen for incoming messages on specified IP and port.
-*/
+ * Listen for incoming messages on specified IP and port.
+ */
 func ListenForMessages(ip string, port int, messageChannelchan chan<- []byte) {
-	conn, err := reuseport.ListenPacket("udp4", ip+":"+strconv.Itoa(port))
+	conn, err := reuseport.ListenPacket("udp4", fmt.Sprintf("%s:%d", ip, port))
 
 	if err != nil {
 		messageChannelchan <- []byte("CONNECTION ERROR")

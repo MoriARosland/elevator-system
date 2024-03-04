@@ -114,7 +114,7 @@ func main() {
 
 	incomingMessageChannel := make(chan []byte)
 
-	go network.ListenForMessages(localIP, elevState.BroadCastPort, incomingMessageChannel)
+	go network.ListenForMessages(localIP, elevConfig.BroadcastPort, incomingMessageChannel)
 
 	for {
 		select {
