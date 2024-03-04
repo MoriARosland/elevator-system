@@ -8,8 +8,8 @@ import (
 	"github.com/libp2p/go-reuseport"
 )
 
-const BROADCAST_IP = "255.255.255.255"
-const BROADCAST_INTERVAL = 10
+const Broadcast_IP = "255.255.255.255"
+const Broadcast_INTERVAL = 100
 
 /*
  * Broadcasts "I'm alive" on specified port.
@@ -22,14 +22,14 @@ func Broadcast(port int) {
 	}
 	defer packetConnection.Close()
 
-	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", BROADCAST_IP, port))
+	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", Broadcast_IP, port))
 
 	if err != nil {
 		panic(err)
 	}
 
 	for {
-		time.Sleep(BROADCAST_INTERVAL * time.Millisecond)
+		time.Sleep(Broadcast_INTERVAL * time.Millisecond)
 
 		_, err := packetConnection.WriteTo([]byte(""), addr)
 
