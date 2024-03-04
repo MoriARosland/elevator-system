@@ -105,6 +105,17 @@ func main() {
 		updateNextNode,
 	)
 
+	localIP, err := network.LocalIP()
+
+	if err != nil {
+		fmt.Println(err)
+		localIP = "DISCONNECTED"
+	}
+
+	incomingMessageChannel := make(chan []byte)
+
+	go network.ListenForMessages(localIP, elevConfig.BroadcastPort, incomingMessageChannel)
+
 	for {
 		select {
 		case newNextNode := <-updateNextNode:
@@ -125,6 +136,9 @@ func main() {
 		case isObstructed := <-drvObstr:
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
+
+		case message := <-incomingMessageChannel:
+			fmt.Println(string(message))
 
 		default:
 			if timer.TimedOut() {
