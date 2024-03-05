@@ -16,10 +16,10 @@ import (
 const NUM_FLOORS = 4
 const DOOR_OPEN_DURATION = 3000
 
-func main() {
-	/*
-	 * Read command line arguments
-	 */
+/*
+ * Parse command line arguments
+ */
+func parseCommandlineFlags() (int, int, int, int) {
 	nodeID := flag.Int("id", -1, "Node id")
 	numNodes := flag.Int("num", -1, "Number of nodes")
 	baseBroadcastPort := flag.Int("bport", -1, "Base Broadcasting port")
@@ -31,6 +31,12 @@ func main() {
 		fmt.Println("Missing flags, use flag -h to see usage")
 		os.Exit(1)
 	}
+
+	return *nodeID, *numNodes, *baseBroadcastPort, *elevServerPort
+}
+
+func main() {
+	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
 
 	/*
 	 * Clear terminal window
