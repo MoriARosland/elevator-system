@@ -4,6 +4,7 @@ import (
 	"Driver-go/elevio"
 	"elevator/types"
 	"errors"
+	"fmt"
 )
 
 const NUM_BUTTONS = 3
@@ -32,12 +33,17 @@ func InitConfig(
 	return &elevator, nil
 }
 
-func InitState(numFloors int) *types.ElevState {
-	requests := make([][]bool, numFloors)
+func InitState(numElevators int, numFloors int) *types.ElevState {
+	requests := make([][][]bool, numElevators)
 
-	for floor := range requests {
-		requests[floor] = make([]bool, NUM_BUTTONS)
+	for elevator := range requests {
+		requests[elevator] = make([][]bool, numFloors)
+		for floor := range requests[elevator] {
+			requests[elevator][floor] = make([]bool, NUM_BUTTONS)
+		}
 	}
+
+	fmt.Println(requests)
 
 	elevState := types.ElevState{
 		Floor:    -1,
@@ -48,10 +54,20 @@ func InitState(numFloors int) *types.ElevState {
 	return &elevState
 }
 
-func SetAllLights(elevState *types.ElevState, elevConfig *types.ElevConfig) {
-	for floor := 0; floor < elevConfig.NumFloors; floor++ {
-		for btn := 0; btn < elevConfig.NumButtons; btn++ {
-			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, elevState.Requests[floor][btn])
+func SetHallLights(requests [][][]bool, elevConfig *types.ElevConfig) {
+	for elevator := range requests {
+		for floor := range requests[elevator] {
+			// Skip the cab buttons by subtracting 1 from elevConfig.NumButtons.
+			// See type ButtonType in lib/driver-go-master/elevio/elevator_io.go for reference.
+			for btn := 0; btn < elevConfig.NumButtons-1; btn++ {
+				elevio.SetButtonLamp(elevio.ButtonType(btn), floor, requests[elevator][floor][btn])
+			}
 		}
+	}
+}
+
+func SetCabLights(cabcalls [][]bool, elevConfig *types.ElevConfig) {
+	for floor := range cabcalls {
+		elevio.SetButtonLamp(elevio.BT_Cab, floor, cabcalls[floor][elevio.BT_Cab])
 	}
 }
