@@ -55,7 +55,9 @@ func UpdateState(
 	elevConfig *types.ElevConfig,
 ) *types.ElevState {
 
-	elevio.SetMotorDirection(stateChanges.Dirn)
+	if stateChanges.SetMotor {
+		elevio.SetMotorDirection(stateChanges.MotorDirn)
+	}
 	elevio.SetDoorOpenLamp(stateChanges.Door)
 
 	if stateChanges.StartDoorTimer {
@@ -64,7 +66,7 @@ func UpdateState(
 
 	newState := types.ElevState{
 		Floor:           oldState.Floor,
-		Dirn:            stateChanges.Dirn,
+		Dirn:            stateChanges.ElevDirn,
 		DoorObstr:       oldState.DoorObstr,
 		Requests:        oldState.Requests,
 		NextNode:        oldState.NextNode,

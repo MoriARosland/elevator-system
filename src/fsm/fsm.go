@@ -19,7 +19,7 @@ func OnOrderAssigned(
 ) types.FsmOutput {
 
 	output := types.FsmOutput{
-		Dirn:           elevState.Dirn,
+		ElevDirn:       elevState.Dirn,
 		Door:           state == types.EB_DoorOpen,
 		StartDoorTimer: false,
 	}
@@ -34,7 +34,7 @@ func OnOrderAssigned(
 	case types.EB_Idle:
 		pair := requests.ChooseDirection(elevState, elevConfig)
 
-		output.Dirn = pair.Dirn
+		output.ElevDirn = pair.Dirn
 		state = pair.Behaviour
 
 		switch state {
@@ -44,7 +44,8 @@ func OnOrderAssigned(
 			output.StartDoorTimer = true
 
 		case types.EB_Moving:
-			output.Dirn = pair.Dirn
+			output.MotorDirn = pair.Dirn
+			output.SetMotor = true
 		}
 	}
 
@@ -57,13 +58,16 @@ func OnFloorArrival(
 ) types.FsmOutput {
 
 	output := types.FsmOutput{
-		Dirn:           elevState.Dirn,
+		ElevDirn:       elevState.Dirn,
 		Door:           state == types.EB_DoorOpen,
 		StartDoorTimer: false,
 	}
 
-	if state == types.EB_Moving && requests.ShouldStop(elevState, elevConfig) {
-		output.Dirn = elevio.MD_Stop
+	shouldStop := requests.ShouldStop(elevState, elevConfig)
+
+	if state == types.EB_Moving && shouldStop {
+		output.MotorDirn = elevio.MD_Stop
+		output.SetMotor = true
 
 		output.Door = true
 		output.StartDoorTimer = true
@@ -82,7 +86,7 @@ func OnDoorTimeout(
 ) types.FsmOutput {
 
 	output := types.FsmOutput{
-		Dirn:           elevState.Dirn,
+		ElevDirn:       elevState.Dirn,
 		Door:           state == types.EB_DoorOpen,
 		StartDoorTimer: false,
 	}
@@ -93,18 +97,16 @@ func OnDoorTimeout(
 
 	pair := requests.ChooseDirection(elevState, elevConfig)
 
-	output.Dirn = pair.Dirn
+	output.ElevDirn = pair.Dirn
 	state = pair.Behaviour
 
 	if state == types.EB_DoorOpen {
 		output.StartDoorTimer = true
 		output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
 	} else {
-		elevio.SetDoorOpenLamp(false)
-		elevio.SetMotorDirection(elevState.Dirn)
-
 		output.Door = false
-		output.Dirn = pair.Dirn
+		output.MotorDirn = pair.Dirn
+		output.SetMotor = true
 	}
 
 	return output

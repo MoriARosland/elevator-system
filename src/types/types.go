@@ -18,10 +18,12 @@ const (
 )
 
 type FsmOutput struct {
-	Dirn           elevio.MotorDirection
+	ElevDirn       elevio.MotorDirection
+	MotorDirn      elevio.MotorDirection
+	SetMotor       bool
 	Door           bool
-	ClearOrders    [3]bool
 	StartDoorTimer bool
+	ClearOrders    [3]bool
 }
 
 type NextNode struct {
