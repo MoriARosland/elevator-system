@@ -7,6 +7,7 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
@@ -105,6 +106,9 @@ func main() {
 		updateNextNode,
 	)
 
+	/*
+	 * Continuously listen for messages from previous node
+	 */
 	localIP, err := network.LocalIP()
 
 	if err != nil {
@@ -113,33 +117,97 @@ func main() {
 	}
 
 	incomingMessageChannel := make(chan []byte)
-
 	go network.ListenForMessages(localIP, elevConfig.BroadcastPort, incomingMessageChannel)
 
+	/*
+	 * Channels used by secure send
+	 */
+	updateNextNodeAddr := make(chan string)
+	replyReceived := make(chan bool)
+
+	/*
+	 * Main for/select
+	 */
 	for {
 		select {
+		/*
+		 * Handle new next node
+		 */
 		case newNextNode := <-updateNextNode:
+			if elevState.NextNode == newNextNode {
+				continue
+			}
+
 			elevState.NextNode = newNextNode
 
-			/*
-			 * Temporary display id and next node
-			 */
-			fmt.Print("\033[J\033[2;0H\r  ")
-			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevConfig.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
+			if elevState.WaitingForReply {
+				updateNextNodeAddr <- elevState.NextNode.Addr
+			}
 
+		/*
+		 * Handle button presses
+		 */
 		case buttonPress := <-drvButtons:
 			fsm.OnRequestButtonPress(buttonPress, elevState, elevConfig)
 
+		/*
+		 * Handle floor arrivals
+		 */
 		case newCurrentFloor := <-drvFloors:
 			fsm.OnFloorArrival(newCurrentFloor, elevState, elevConfig)
 
+		/*
+		 * Handle door obstructions
+		 */
 		case isObstructed := <-drvObstr:
+			if elevState.DoorObstr == isObstructed {
+				continue
+			}
+
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
 
-		case message := <-incomingMessageChannel:
-			fmt.Println(string(message))
+			/*
+			 * For testing: send a secure message
+			 */
+			if elevState.WaitingForReply {
+				continue
+			}
 
+			elevState.WaitingForReply = true
+
+			buffer := make([]byte, 4)
+			binary.BigEndian.PutUint32(buffer, uint32(elevConfig.BroadcastPort))
+
+			go network.SecureSend(
+				elevState.NextNode.Addr,
+				buffer,
+				replyReceived,
+				updateNextNodeAddr,
+			)
+
+		/*
+		 * Handle incomming UDP messages
+		 */
+		case message := <-incomingMessageChannel:
+			/*
+			 * ...and receive (or forward) the secure msg
+			 */
+
+			receivedMsg := binary.BigEndian.Uint32(message)
+
+			if receivedMsg == uint32(elevConfig.BroadcastPort) && elevState.WaitingForReply {
+				replyReceived <- true
+				elevState.WaitingForReply = false
+				fmt.Println("Recieved reply!")
+			} else {
+				network.Send(elevState.NextNode.Addr, message)
+				fmt.Println("Received: ", receivedMsg)
+			}
+
+		/*
+		 * Handle door time outs
+		 */
 		default:
 			if timer.TimedOut() {
 				if elevState.DoorObstr {
