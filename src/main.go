@@ -126,6 +126,9 @@ func main() {
 		 * Handle new next node
 		 */
 		case newNextNode := <-updateNextNode:
+			/*
+			 * TODO: handle reassignment of the dead nodes hall orders
+			 */
 			if elevState.NextNode == newNextNode {
 				continue
 			}
