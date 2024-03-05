@@ -17,6 +17,13 @@ const (
 	EB_Moving
 )
 
+type FsmOutput struct {
+	Dirn           elevio.MotorDirection
+	Door           bool
+	ClearOrders    [3]bool
+	StartDoorTimer bool
+}
+
 type NextNode struct {
 	ID   int
 	Addr string

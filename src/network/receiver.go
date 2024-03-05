@@ -15,7 +15,6 @@ func ListenForMessages(ip string, port int, messageChannelchan chan<- []byte) {
 	conn, err := reuseport.ListenPacket("udp4", fmt.Sprintf("%s:%d", ip, port))
 
 	if err != nil {
-		messageChannelchan <- []byte("CONNECTION ERROR")
 		panic(err)
 	}
 

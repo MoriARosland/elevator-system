@@ -2,16 +2,17 @@ package elev
 
 import (
 	"Driver-go/elevio"
+	"elevator/timer"
 	"elevator/types"
 	"errors"
+	"fmt"
 )
-
-const NUM_BUTTONS = 3
 
 func InitConfig(
 	nodeID int,
 	numNodes int,
 	numFloors int,
+	numButtons int,
 	doorOpenDuration int,
 	basePort int,
 ) (*types.ElevConfig, error) {
@@ -24,7 +25,7 @@ func InitConfig(
 		NodeID:           nodeID,
 		NumNodes:         numNodes,
 		NumFloors:        numFloors,
-		NumButtons:       NUM_BUTTONS,
+		NumButtons:       numButtons,
 		DoorOpenDuration: doorOpenDuration,
 		BroadcastPort:    basePort + nodeID,
 	}
@@ -32,11 +33,11 @@ func InitConfig(
 	return &elevator, nil
 }
 
-func InitState(numFloors int) *types.ElevState {
-	requests := make([][]bool, numFloors)
+func InitState(elevConfig *types.ElevConfig) *types.ElevState {
+	requests := make([][]bool, elevConfig.NumFloors)
 
 	for floor := range requests {
-		requests[floor] = make([]bool, NUM_BUTTONS)
+		requests[floor] = make([]bool, elevConfig.NumButtons)
 	}
 
 	elevState := types.ElevState{
@@ -46,6 +47,72 @@ func InitState(numFloors int) *types.ElevState {
 	}
 
 	return &elevState
+}
+
+func UpdateState(
+	oldState *types.ElevState,
+	stateChanges types.FsmOutput,
+	elevConfig *types.ElevConfig,
+) *types.ElevState {
+
+	elevio.SetMotorDirection(stateChanges.Dirn)
+	elevio.SetDoorOpenLamp(stateChanges.Door)
+
+	if stateChanges.StartDoorTimer {
+		timer.Start(elevConfig.DoorOpenDuration)
+	}
+
+	newState := types.ElevState{
+		Floor:           oldState.Floor,
+		Dirn:            stateChanges.Dirn,
+		DoorObstr:       oldState.DoorObstr,
+		Requests:        oldState.Requests,
+		NextNode:        oldState.NextNode,
+		WaitingForReply: oldState.WaitingForReply,
+	}
+
+	for order, clearOrder := range stateChanges.ClearOrders {
+		if clearOrder {
+			newState.Requests[newState.Floor][order] = false
+		}
+	}
+
+	SetAllLights(&newState, elevConfig)
+
+	return &newState
+}
+
+/*
+ * Initiate elevator driver and elevator polling
+ */
+func InitDriver(
+	port int,
+	numFloors int,
+) (chan elevio.ButtonEvent, chan int, chan bool) {
+
+	elevio.Init(fmt.Sprintf("localhost:%d", port), numFloors)
+
+	drvButtons := make(chan elevio.ButtonEvent)
+	drvFloors := make(chan int)
+	drvObstr := make(chan bool)
+
+	go elevio.PollButtons(drvButtons)
+	go elevio.PollFloorSensor(drvFloors)
+	go elevio.PollObstructionSwitch(drvObstr)
+
+	return drvButtons, drvFloors, drvObstr
+}
+
+func FindNextNodeID(elevConfig *types.ElevConfig) int {
+	var nextNodeID int
+
+	if elevConfig.NodeID+1 >= elevConfig.NumNodes {
+		nextNodeID = 0
+	} else {
+		nextNodeID = elevConfig.NodeID + 1
+	}
+
+	return nextNodeID
 }
 
 func SetAllLights(elevState *types.ElevState, elevConfig *types.ElevConfig) {

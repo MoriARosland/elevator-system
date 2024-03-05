@@ -2,9 +2,7 @@ package fsm
 
 import (
 	"Driver-go/elevio"
-	"elevator/elev"
 	"elevator/requests"
-	"elevator/timer"
 	"elevator/types"
 )
 
@@ -14,79 +12,100 @@ func OnInitBetweenFloors() {
 	state = types.EB_Moving
 }
 
-func OnRequestButtonPress(
-	buttonPress elevio.ButtonEvent,
+func OnOrderAssigned(
+	newOrder elevio.ButtonEvent,
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
-) {
+) types.FsmOutput {
+
+	output := types.FsmOutput{
+		Dirn:           elevState.Dirn,
+		Door:           state == types.EB_DoorOpen,
+		StartDoorTimer: false,
+	}
+
 	switch state {
 	case types.EB_DoorOpen:
-		if requests.ShouldClearImmediately(elevState, buttonPress) {
-			timer.Start(elevConfig.DoorOpenDuration)
-		} else {
-			elevState.Requests[buttonPress.Floor][buttonPress.Button] = true
+		if requests.ShouldClearImmediately(elevState, newOrder) {
+			output.StartDoorTimer = true
+			output.ClearOrders[newOrder.Button] = true
 		}
 
-	case types.EB_Moving:
-		elevState.Requests[buttonPress.Floor][buttonPress.Button] = true
-
 	case types.EB_Idle:
-		elevState.Requests[buttonPress.Floor][buttonPress.Button] = true
 		pair := requests.ChooseDirection(elevState, elevConfig)
 
-		elevState.Dirn = pair.Dirn
+		output.Dirn = pair.Dirn
 		state = pair.Behaviour
 
-		switch pair.Behaviour {
+		switch state {
 		case types.EB_DoorOpen:
-			elevio.SetDoorOpenLamp(true)
-			timer.Start(elevConfig.DoorOpenDuration)
-			requests.ClearAtcurrentFloor(elevState, elevConfig)
+			output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
+			output.Door = true
+			output.StartDoorTimer = true
 
 		case types.EB_Moving:
-			elevio.SetMotorDirection(pair.Dirn)
+			output.Dirn = pair.Dirn
 		}
 	}
 
-	elev.SetAllLights(elevState, elevConfig)
+	return output
 }
 
 func OnFloorArrival(
-	floor int,
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
-) {
-	elevState.Floor = floor
-	elevio.SetFloorIndicator(elevState.Floor)
+) types.FsmOutput {
+
+	output := types.FsmOutput{
+		Dirn:           elevState.Dirn,
+		Door:           state == types.EB_DoorOpen,
+		StartDoorTimer: false,
+	}
 
 	if state == types.EB_Moving && requests.ShouldStop(elevState, elevConfig) {
-		elevio.SetMotorDirection(elevio.MD_Stop)
-		elevio.SetDoorOpenLamp(true)
+		output.Dirn = elevio.MD_Stop
 
-		requests.ClearAtcurrentFloor(elevState, elevConfig)
+		output.Door = true
+		output.StartDoorTimer = true
 
-		timer.Start(elevConfig.DoorOpenDuration)
-		elev.SetAllLights(elevState, elevConfig)
+		output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
+
 		state = types.EB_DoorOpen
 	}
+
+	return output
 }
 
-func OnDoorTimeout(elevState *types.ElevState, elevConfig *types.ElevConfig) {
+func OnDoorTimeout(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+) types.FsmOutput {
+
+	output := types.FsmOutput{
+		Dirn:           elevState.Dirn,
+		Door:           state == types.EB_DoorOpen,
+		StartDoorTimer: false,
+	}
+
 	if state != types.EB_DoorOpen {
-		return
+		return output
 	}
 
 	pair := requests.ChooseDirection(elevState, elevConfig)
 
-	elevState.Dirn = pair.Dirn
+	output.Dirn = pair.Dirn
 	state = pair.Behaviour
 
 	if state == types.EB_DoorOpen {
-		timer.Start(elevConfig.DoorOpenDuration)
-		requests.ClearAtcurrentFloor(elevState, elevConfig)
-		elev.SetAllLights(elevState, elevConfig)
+		output.StartDoorTimer = true
+		output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
 	} else {
 		elevio.SetDoorOpenLamp(false)
 		elevio.SetMotorDirection(elevState.Dirn)
+
+		output.Door = false
+		output.Dirn = pair.Dirn
 	}
+
+	return output
 }
