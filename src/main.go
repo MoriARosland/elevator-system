@@ -55,7 +55,7 @@ func main() {
 	/*
 	 * Initiate elevator state
 	 */
-	elevState := elev.InitState(elevConfig.NumFloors)
+	elevState := elev.InitState(elevConfig.NumNodes, elevConfig.NumFloors)
 
 	/*
 	 * Initiate elevator driver and elevator polling
