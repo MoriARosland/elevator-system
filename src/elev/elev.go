@@ -43,8 +43,6 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 		}
 	}
 
-	fmt.Println(requests)
-
 	elevState := types.ElevState{
 		Floor:    -1,
 		Dirn:     elevio.MD_Stop,
