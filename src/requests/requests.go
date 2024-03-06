@@ -96,18 +96,25 @@ func ShouldStop(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 	}
 }
 
-func ShouldClearImmediately(elevState *types.ElevState, buttonPress elevio.ButtonEvent) bool {
+func ShouldClearImmediately(elevState *types.ElevState, order elevio.ButtonEvent) bool {
 	/*
 	 * TODO: check project requirements to make sure clearing is handled correctly
 	 */
-	return elevState.Floor == buttonPress.Floor
+	return elevState.Floor == order.Floor
 }
 
-func ClearAtcurrentFloor(elevState *types.ElevState, elevConfig *types.ElevConfig) {
+func ClearAtCurrentFloor(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+) [3]bool {
 	/*
 	 * ...same here
 	 */
+	var clearOrders [3]bool
+
 	for btn := 0; btn < elevConfig.NumButtons; btn++ {
-		elevState.Requests[elevState.Floor][btn] = false
+		clearOrders[btn] = true
 	}
+
+	return clearOrders
 }
