@@ -107,25 +107,24 @@ func ClearAtCurrentFloor(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 ) [3]bool {
-	/*
-	 * ...same here
-	 */
+
 	var clearOrders [3]bool
 	floor := elevState.Floor
+	id := elevConfig.NodeID
 
 	clearOrders[elevio.BT_Cab] = true
 
 	switch elevState.Dirn {
 	case elevio.MD_Up:
 		if !requestsAbove(elevState, elevConfig) &&
-			!elevState.Requests[floor][elevio.BT_HallUp] {
+			!elevState.Requests[id][floor][elevio.BT_HallUp] {
 			clearOrders[elevio.BT_HallDown] = true
 		}
 		clearOrders[elevio.BT_HallUp] = true
 
 	case elevio.MD_Down:
 		if !requestsBelow(elevState, elevConfig) &&
-			!elevState.Requests[floor][elevio.BT_HallDown] {
+			!elevState.Requests[id][floor][elevio.BT_HallDown] {
 			clearOrders[elevio.BT_HallUp] = true
 		}
 		clearOrders[elevio.BT_HallDown] = true
