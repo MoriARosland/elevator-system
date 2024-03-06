@@ -44,7 +44,7 @@ type ElevState struct {
 	Floor           int
 	Dirn            elevio.MotorDirection
 	DoorObstr       bool
-	Requests        [][]bool
+	Requests        [][][]bool
 	NextNode        NextNode
 	WaitingForReply bool
 }
