@@ -34,11 +34,16 @@ func InitConfig(
 }
 
 func InitState(elevConfig *types.ElevConfig) *types.ElevState {
-	requests := make([][]bool, elevConfig.NumFloors)
+	requests := make([][][]bool, elevConfig.NumNodes)
 
-	for floor := range requests {
-		requests[floor] = make([]bool, elevConfig.NumButtons)
+	for elevator := range requests {
+		requests[elevator] = make([][]bool, elevConfig.NumFloors)
+		for floor := range requests[elevator] {
+			requests[elevator][floor] = make([]bool, elevConfig.NumButtons)
+		}
 	}
+
+	fmt.Println(requests)
 
 	elevState := types.ElevState{
 		Floor:    -1,
@@ -75,11 +80,14 @@ func UpdateState(
 
 	for order, clearOrder := range stateChanges.ClearOrders {
 		if clearOrder {
-			newState.Requests[newState.Floor][order] = false
+			// TODO: Handle order clearing correctly (sendSecure through network)
+			newState.Requests[elevConfig.NodeID][newState.Floor][order] = false
 		}
 	}
 
-	SetAllLights(&newState, elevConfig)
+	cabcalls := newState.Requests[elevConfig.NodeID]
+	SetCabLights(cabcalls, elevConfig)
+	SetHallLights(newState.Requests, elevConfig)
 
 	return &newState
 }
@@ -117,10 +125,20 @@ func FindNextNodeID(elevConfig *types.ElevConfig) int {
 	return nextNodeID
 }
 
-func SetAllLights(elevState *types.ElevState, elevConfig *types.ElevConfig) {
-	for floor := 0; floor < elevConfig.NumFloors; floor++ {
-		for btn := 0; btn < elevConfig.NumButtons; btn++ {
-			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, elevState.Requests[floor][btn])
+func SetHallLights(requests [][][]bool, elevConfig *types.ElevConfig) {
+	for elevator := range requests {
+		for floor := range requests[elevator] {
+			// Skip the cab buttons by subtracting 1 from elevConfig.NumButtons.
+			// See type ButtonType in lib/driver-go-master/elevio/elevator_io.go for reference.
+			for btn := 0; btn < elevConfig.NumButtons-1; btn++ {
+				elevio.SetButtonLamp(elevio.ButtonType(btn), floor, requests[elevator][floor][btn])
+			}
 		}
+	}
+}
+
+func SetCabLights(cabcalls [][]bool, elevConfig *types.ElevConfig) {
+	for floor := range cabcalls {
+		elevio.SetButtonLamp(elevio.BT_Cab, floor, cabcalls[floor][elevio.BT_Cab])
 	}
 }
