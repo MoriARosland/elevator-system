@@ -124,13 +124,26 @@ func FindNextNodeID(elevConfig *types.ElevConfig) int {
 }
 
 func SetHallLights(requests [][][]bool, elevConfig *types.ElevConfig) {
+	// We are here skipping the cab buttons by subtracting 1 from elevConfig.NumButtons.
+	// See type ButtonType in lib/driver-go-master/elevio/elevator_io.go for reference.
+
+	combinedRequests := make([][]bool, elevConfig.NumFloors)
+
+	for floor := range combinedRequests {
+		combinedRequests[floor] = make([]bool, elevConfig.NumButtons-1)
+	}
+
 	for elevator := range requests {
 		for floor := range requests[elevator] {
-			// Skip the cab buttons by subtracting 1 from elevConfig.NumButtons.
-			// See type ButtonType in lib/driver-go-master/elevio/elevator_io.go for reference.
 			for btn := 0; btn < elevConfig.NumButtons-1; btn++ {
-				elevio.SetButtonLamp(elevio.ButtonType(btn), floor, requests[elevator][floor][btn])
+				combinedRequests[floor][btn] = requests[elevator][floor][btn] || combinedRequests[floor][btn]
 			}
+		}
+	}
+
+	for floor := range combinedRequests {
+		for btn := 0; btn < elevConfig.NumButtons-1; btn++ {
+			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, combinedRequests[floor][btn])
 		}
 	}
 }
