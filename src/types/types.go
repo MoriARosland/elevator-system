@@ -50,3 +50,39 @@ type ElevState struct {
 	NextNode        NextNode
 	WaitingForReply bool
 }
+
+type Msg struct {
+	AuthorID int
+	Type     string // The type of the value in Content, stored as a string
+	Content  any    // The content of a message should be one of the structs below (bid, assign, reassign, served or sync)
+}
+
+type JsonStrMsg struct {
+	AuthorID int
+	Type     string
+	Content  []byte
+}
+
+type Bid struct {
+	Order        Order
+	TimeToServed []int
+}
+
+type Assign struct {
+	Order    Order
+	Assignee int
+}
+
+type Reassign struct {
+	Order       Order
+	NewAssignee int
+	OldAssignee int
+}
+
+type Served struct {
+	Order Order
+}
+
+type Sync struct {
+	Orders [][][]bool
+}

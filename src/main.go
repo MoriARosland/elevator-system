@@ -143,7 +143,7 @@ func main() {
 		 * Handle button presses
 		 */
 		case buttonEvent := <-drvButtons:
-			
+
 			/*
 			 * TODO: assign order properly
 			 */
@@ -183,6 +183,38 @@ func main() {
 
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
+
+			/*
+			* Test MsgToJson() og JsonToMsg()
+			 */
+
+			bid := types.Bid{
+				Order:        types.Order{Floor: 1, Button: 2},
+				TimeToServed: []int{1, 2, 3},
+			}
+
+			assign := types.Assign{
+				Order:    types.Order{Floor: 2, Button: 0},
+				Assignee: 1,
+			}
+
+			encoded_msg := network.MsgToJson(bid, 1)
+			decoded_msg := network.JsonToMsg(encoded_msg)
+
+			fmt.Print("\n", decoded_msg, "\n\n")
+			fmt.Print(decoded_msg.Content, "\n")
+
+			encoded_msg = network.MsgToJson(assign, 1)
+			decoded_msg = network.JsonToMsg(encoded_msg)
+
+			encoded_msg = network.MsgToJson(decoded_msg.Content, 2)
+			decoded_msg = network.JsonToMsg(encoded_msg)
+
+			encoded_msg = network.MsgToJson(decoded_msg.Content, 3)
+			decoded_msg = network.JsonToMsg(encoded_msg)
+
+			fmt.Print("\n", decoded_msg, "\n\n")
+			fmt.Print(decoded_msg.Content, "\n")
 
 		/*
 		 * Handle incomming UDP messages

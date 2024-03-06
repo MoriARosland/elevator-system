@@ -46,7 +46,7 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 	elevState := types.ElevState{
 		Floor:  -1,
 		Dirn:   elevio.MD_Stop,
-		Orders: Orders,
+		Orders: orders,
 	}
 
 	return &elevState
