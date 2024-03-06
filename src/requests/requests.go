@@ -97,10 +97,10 @@ func ShouldStop(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 }
 
 func ShouldClearImmediately(elevState *types.ElevState, order elevio.ButtonEvent) bool {
-	/*
-	 * TODO: check project requirements to make sure clearing is handled correctly
-	 */
-	return elevState.Floor == order.Floor
+	return elevState.Floor == order.Floor && ((elevState.Dirn == elevio.MD_Up && order.Button == elevio.BT_HallUp) ||
+		(elevState.Dirn == elevio.MD_Down && order.Button == elevio.BT_HallDown) ||
+		elevState.Dirn == elevio.MD_Stop ||
+		order.Button == elevio.BT_Cab)
 }
 
 func ClearAtCurrentFloor(
@@ -111,9 +111,28 @@ func ClearAtCurrentFloor(
 	 * ...same here
 	 */
 	var clearOrders [3]bool
+	floor := elevState.Floor
 
-	for btn := 0; btn < elevConfig.NumButtons; btn++ {
-		clearOrders[btn] = true
+	clearOrders[elevio.BT_Cab] = true
+
+	switch elevState.Dirn {
+	case elevio.MD_Up:
+		if !requestsAbove(elevState, elevConfig) &&
+			!elevState.Requests[floor][elevio.BT_HallUp] {
+			clearOrders[elevio.BT_HallDown] = true
+		}
+		clearOrders[elevio.BT_HallUp] = true
+
+	case elevio.MD_Down:
+		if !requestsBelow(elevState, elevConfig) &&
+			!elevState.Requests[floor][elevio.BT_HallDown] {
+			clearOrders[elevio.BT_HallUp] = true
+		}
+		clearOrders[elevio.BT_HallDown] = true
+
+	default:
+		clearOrders[elevio.BT_HallUp] = true
+		clearOrders[elevio.BT_HallDown] = true
 	}
 
 	return clearOrders
