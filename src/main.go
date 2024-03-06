@@ -146,7 +146,7 @@ func main() {
 			/*
 			 * TODO: assign order properly
 			 */
-			elevState.Requests[newOrder.Floor][newOrder.Button] = true
+			elevState.Requests[elevConfig.NodeID][newOrder.Floor][newOrder.Button] = true
 
 			output := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
 
