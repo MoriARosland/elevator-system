@@ -8,7 +8,7 @@ import (
 func requestsAbove(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 	for floor := elevState.Floor + 1; floor < elevConfig.NumFloors; floor++ {
 		for btn := 0; btn < elevConfig.NumButtons; btn++ {
-			if elevState.Requests[floor][btn] {
+			if elevState.Requests[elevConfig.NodeID][floor][btn] {
 				return true
 			}
 		}
@@ -20,7 +20,7 @@ func requestsAbove(elevState *types.ElevState, elevConfig *types.ElevConfig) boo
 func requestsBelow(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 	for floor := 0; floor < elevState.Floor; floor++ {
 		for btn := 0; btn < elevConfig.NumButtons; btn++ {
-			if elevState.Requests[floor][btn] {
+			if elevState.Requests[elevConfig.NodeID][floor][btn] {
 				return true
 			}
 		}
@@ -31,7 +31,7 @@ func requestsBelow(elevState *types.ElevState, elevConfig *types.ElevConfig) boo
 
 func requestsHere(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 	for btn := 0; btn < elevConfig.NumButtons; btn++ {
-		if elevState.Requests[elevState.Floor][btn] {
+		if elevState.Requests[elevConfig.NodeID][elevState.Floor][btn] {
 			return true
 		}
 	}
@@ -82,13 +82,13 @@ func ChooseDirection(elevState *types.ElevState, elevConfig *types.ElevConfig) t
 func ShouldStop(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 	switch elevState.Dirn {
 	case elevio.MD_Down:
-		return (elevState.Requests[elevState.Floor][elevio.BT_HallDown] ||
-			elevState.Requests[elevState.Floor][elevio.BT_Cab] ||
+		return (elevState.Requests[elevConfig.NodeID][elevState.Floor][elevio.BT_HallDown] ||
+			elevState.Requests[elevConfig.NodeID][elevState.Floor][elevio.BT_Cab] ||
 			!requestsBelow(elevState, elevConfig))
 
 	case elevio.MD_Up:
-		return (elevState.Requests[elevState.Floor][elevio.BT_HallUp] ||
-			elevState.Requests[elevState.Floor][elevio.BT_Cab] ||
+		return (elevState.Requests[elevConfig.NodeID][elevState.Floor][elevio.BT_HallUp] ||
+			elevState.Requests[elevConfig.NodeID][elevState.Floor][elevio.BT_Cab] ||
 			!requestsAbove(elevState, elevConfig))
 
 	default:
@@ -96,18 +96,25 @@ func ShouldStop(elevState *types.ElevState, elevConfig *types.ElevConfig) bool {
 	}
 }
 
-func ShouldClearImmediately(elevState *types.ElevState, buttonPress elevio.ButtonEvent) bool {
+func ShouldClearImmediately(elevState *types.ElevState, order elevio.ButtonEvent) bool {
 	/*
 	 * TODO: check project requirements to make sure clearing is handled correctly
 	 */
-	return elevState.Floor == buttonPress.Floor
+	return elevState.Floor == order.Floor
 }
 
-func ClearAtcurrentFloor(elevState *types.ElevState, elevConfig *types.ElevConfig) {
+func ClearAtCurrentFloor(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+) [3]bool {
 	/*
 	 * ...same here
 	 */
+	var clearOrders [3]bool
+
 	for btn := 0; btn < elevConfig.NumButtons; btn++ {
-		elevState.Requests[elevState.Floor][btn] = false
+		clearOrders[btn] = true
 	}
+
+	return clearOrders
 }
