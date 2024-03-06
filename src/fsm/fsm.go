@@ -2,7 +2,7 @@ package fsm
 
 import (
 	"Driver-go/elevio"
-	"elevator/requests"
+	"elevator/orders"
 	"elevator/types"
 )
 
@@ -13,7 +13,7 @@ func OnInitBetweenFloors() {
 }
 
 func OnOrderAssigned(
-	newOrder elevio.ButtonEvent,
+	newOrder types.Order,
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 ) types.FsmOutput {
@@ -26,20 +26,20 @@ func OnOrderAssigned(
 
 	switch state {
 	case types.EB_DoorOpen:
-		if requests.ShouldClearImmediately(elevState, newOrder) {
+		if orders.ShouldClearImmediately(elevState, newOrder) {
 			output.StartDoorTimer = true
 			output.ClearOrders[newOrder.Button] = true
 		}
 
 	case types.EB_Idle:
-		pair := requests.ChooseDirection(elevState, elevConfig)
+		pair := orders.ChooseDirection(elevState, elevConfig)
 
 		output.ElevDirn = pair.Dirn
 		state = pair.Behaviour
 
 		switch state {
 		case types.EB_DoorOpen:
-			output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
+			output.ClearOrders = orders.ClearAtCurrentFloor(elevState, elevConfig)
 			output.Door = true
 			output.StartDoorTimer = true
 
@@ -63,7 +63,7 @@ func OnFloorArrival(
 		StartDoorTimer: false,
 	}
 
-	shouldStop := requests.ShouldStop(elevState, elevConfig)
+	shouldStop := orders.ShouldStop(elevState, elevConfig)
 
 	if state == types.EB_Moving && shouldStop {
 		output.MotorDirn = elevio.MD_Stop
@@ -72,7 +72,7 @@ func OnFloorArrival(
 		output.Door = true
 		output.StartDoorTimer = true
 
-		output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
+		output.ClearOrders = orders.ClearAtCurrentFloor(elevState, elevConfig)
 
 		state = types.EB_DoorOpen
 	}
@@ -95,14 +95,14 @@ func OnDoorTimeout(
 		return output
 	}
 
-	pair := requests.ChooseDirection(elevState, elevConfig)
+	pair := orders.ChooseDirection(elevState, elevConfig)
 
 	output.ElevDirn = pair.Dirn
 	state = pair.Behaviour
 
 	if state == types.EB_DoorOpen {
 		output.StartDoorTimer = true
-		output.ClearOrders = requests.ClearAtCurrentFloor(elevState, elevConfig)
+		output.ClearOrders = orders.ClearAtCurrentFloor(elevState, elevConfig)
 	} else {
 		output.Door = false
 		output.MotorDirn = pair.Dirn

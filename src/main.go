@@ -142,13 +142,15 @@ func main() {
 		/*
 		 * Handle button presses
 		 */
-		case newOrder := <-drvButtons:
+		case buttonEvent := <-drvButtons:
+			
 			/*
 			 * TODO: assign order properly
 			 */
-			elevState.Requests[elevConfig.NodeID][newOrder.Floor][newOrder.Button] = true
 
-			output := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
+			elevState.Orders[elevConfig.NodeID][buttonEvent.Floor][buttonEvent.Button] = true
+
+			output := fsm.OnOrderAssigned(buttonEvent, elevState, elevConfig)
 
 			elevState = elev.UpdateState(
 				elevState,

@@ -4,6 +4,8 @@ import (
 	"Driver-go/elevio"
 )
 
+type Order = elevio.ButtonEvent
+
 type DirnBehaviourPair struct {
 	Dirn      elevio.MotorDirection
 	Behaviour ElevBehaviour
@@ -44,7 +46,7 @@ type ElevState struct {
 	Floor           int
 	Dirn            elevio.MotorDirection
 	DoorObstr       bool
-	Requests        [][][]bool
+	Orders          [][][]bool
 	NextNode        NextNode
 	WaitingForReply bool
 }
