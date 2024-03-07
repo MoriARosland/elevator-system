@@ -219,7 +219,7 @@ func main() {
 				/*
 				 * Handle assign
 				 */
-				decodedMsgContent := network.JsonToMsg[types.Bid](msgContent)
+				decodedMsgContent := network.JsonToMsg[types.Assign](msgContent)
 				fmt.Println("Received message: ", decodedMsgContent)
 
 			case types.REASSIGN:
