@@ -8,13 +8,13 @@ import (
 
 const TRAVEL_TIME = 2000 // ms
 
-func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig, request types.Order) int {
+func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig, order types.Order) int {
 	if 0 > elevState.Floor {
 		return -1
 	}
 
 	elevSimState := *elevState
-	elevSimState.Orders[elevConfig.NodeID][request.Floor][request.Button] = true
+	elevSimState.Orders[elevConfig.NodeID][order.Floor][order.Button] = true
 
 	duration := 0
 
@@ -38,7 +38,7 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 		if orders.ShouldStop(&elevSimState, elevConfig) {
 			shouldClear := orders.ClearAtCurrentFloor(&elevSimState, elevConfig)
 
-			if request.Floor == elevSimState.Floor && shouldClear[request.Button] {
+			if order.Floor == elevSimState.Floor && shouldClear[order.Button] {
 				return duration
 			}
 
