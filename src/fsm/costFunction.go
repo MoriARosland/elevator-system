@@ -2,7 +2,7 @@ package fsm
 
 import (
 	"Driver-go/elevio"
-	"elevator/requests"
+	"elevator/orders"
 	"elevator/types"
 )
 
@@ -14,13 +14,13 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 	}
 
 	elevSimState := *elevState
-	elevSimState.Requests[elevConfig.NodeID][request.Floor][request.Button] = true
+	elevSimState.Orders[elevConfig.NodeID][request.Floor][request.Button] = true
 
 	duration := 0
 
 	switch state {
 	case types.EB_Idle:
-		elevSimState.Dirn = requests.ChooseDirection(&elevSimState, elevConfig).Dirn
+		elevSimState.Dirn = orders.ChooseDirection(&elevSimState, elevConfig).Dirn
 
 		if elevSimState.Dirn == elevio.MD_Stop {
 			return duration
@@ -35,8 +35,8 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 	}
 
 	for {
-		if requests.ShouldStop(&elevSimState, elevConfig) {
-			shouldClear := requests.ClearAtCurrentFloor(&elevSimState, elevConfig)
+		if orders.ShouldStop(&elevSimState, elevConfig) {
+			shouldClear := orders.ClearAtCurrentFloor(&elevSimState, elevConfig)
 
 			if request.Floor == elevSimState.Floor && shouldClear[request.Button] {
 				return duration
@@ -45,12 +45,12 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 			// TODO: Add clear order func
 			for btn, clearButton := range shouldClear {
 				if clearButton {
-					elevSimState.Requests[elevConfig.NodeID][elevSimState.Floor][btn] = false
+					elevSimState.Orders[elevConfig.NodeID][elevSimState.Floor][btn] = false
 				}
 			}
 
 			duration += elevConfig.DoorOpenDuration
-			elevSimState.Dirn = requests.ChooseDirection(&elevSimState, elevConfig).Dirn
+			elevSimState.Dirn = orders.ChooseDirection(&elevSimState, elevConfig).Dirn
 		}
 
 		elevSimState.Floor += int(elevSimState.Dirn)
