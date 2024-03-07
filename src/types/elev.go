@@ -1,32 +1,8 @@
 package types
 
-import (
-	"Driver-go/elevio"
-)
+import "Driver-go/elevio"
 
 type Order = elevio.ButtonEvent
-
-type DirnBehaviourPair struct {
-	Dirn      elevio.MotorDirection
-	Behaviour ElevBehaviour
-}
-
-type ElevBehaviour int
-
-const (
-	EB_Idle ElevBehaviour = iota
-	EB_DoorOpen
-	EB_Moving
-)
-
-type FsmOutput struct {
-	ElevDirn       elevio.MotorDirection
-	MotorDirn      elevio.MotorDirection
-	SetMotor       bool
-	Door           bool
-	StartDoorTimer bool
-	ClearOrders    [3]bool
-}
 
 type NextNode struct {
 	ID   int
