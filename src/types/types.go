@@ -4,6 +4,8 @@ import (
 	"Driver-go/elevio"
 )
 
+type Order = elevio.ButtonEvent
+
 type DirnBehaviourPair struct {
 	Dirn      elevio.MotorDirection
 	Behaviour ElevBehaviour
