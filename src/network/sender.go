@@ -17,7 +17,7 @@ const MSG_TIMEOUT = 2000
 /*
  *	Send message using UDP protocol to the sepcified address
  */
-func Send(addr string, msgType types.MsgTypes, msg []byte) {
+func Send(addr string, msgType types.MsgTypes, msgContent []byte) {
 	if addr == "" {
 		return
 	}
@@ -34,14 +34,20 @@ func Send(addr string, msgType types.MsgTypes, msg []byte) {
 		panic(err)
 	}
 
-	typeBuffer := make([]byte, 4)
-	binary.BigEndian.PutUint32(typeBuffer, uint32(msgType))
+	/*
+	 * Add type message type as an integer at the start of the byte array
+	 */
+	sizeofInt := 4
+	msgTypeBuffer := make([]byte, sizeofInt)
 
-	byteSlice := [][]byte{typeBuffer, msg}
-	seperator := []byte(",")
-	jointBytes := bytes.Join(byteSlice, seperator)
+	binary.BigEndian.PutUint32(msgTypeBuffer, uint32(msgType))
 
-	_, err = packetConnection.WriteTo(jointBytes, resolvedAddr)
+	msgAndTypeBuffer := [][]byte{msgTypeBuffer, msgContent}
+	seperator := []byte("")
+
+	msgWithType := bytes.Join(msgAndTypeBuffer, seperator)
+
+	_, err = packetConnection.WriteTo(msgWithType, resolvedAddr)
 	if err != nil {
 		panic(err)
 	}
