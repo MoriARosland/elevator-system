@@ -9,18 +9,20 @@ import (
 const TRAVEL_TIME = 2000 // ms
 
 func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig, request types.Order) int {
+	if 0 > elevState.Floor {
+		return -1
+	}
+
 	elevSimState := *elevState
 	elevSimState.Requests[elevConfig.NodeID][request.Floor][request.Button] = true
 
-	simulationState := state
-
 	duration := 0
 
-	switch simulationState {
+	switch state {
 	case types.EB_Idle:
-		elevState.Dirn = requests.ChooseDirection(elevState, elevConfig).Dirn
+		elevSimState.Dirn = requests.ChooseDirection(&elevSimState, elevConfig).Dirn
 
-		if elevState.Dirn == elevio.MD_Stop {
+		if elevSimState.Dirn == elevio.MD_Stop {
 			return duration
 		}
 
@@ -48,7 +50,7 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 			}
 
 			duration += elevConfig.DoorOpenDuration
-			elevState.Dirn = requests.ChooseDirection(elevState, elevConfig).Dirn
+			elevSimState.Dirn = requests.ChooseDirection(&elevSimState, elevConfig).Dirn
 		}
 
 		elevSimState.Floor += int(elevSimState.Dirn)
