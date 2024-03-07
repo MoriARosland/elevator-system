@@ -2,7 +2,6 @@ package main
 
 import (
 	"Driver-go/elevio"
-	"bytes"
 	"elevator/elev"
 	"elevator/fsm"
 	"elevator/network"
@@ -187,7 +186,7 @@ func main() {
 			elevState.DoorObstr = isObstructed
 
 			/*
-			 * Test MsgToJson() og JsonToMsg()
+			 * Test: send an assign message
 			 */
 
 			msg := types.Msg[types.Assign]{
@@ -205,14 +204,38 @@ func main() {
 		 * Handle incomming UDP messages
 		 */
 		case msg := <-incomingMessageChannel:
-			seperator := []byte(",")
-			msgType, cutMsg, _ := bytes.Cut(msg, seperator)
+			sizeofInt := 4
+			msgType, msgContent := msg[:sizeofInt], msg[sizeofInt:]
 
-			decodedType := binary.BigEndian.Uint32(msgType)
+			decodedMsgType := binary.BigEndian.Uint32(msgType)
 
-			if types.MsgTypes(decodedType) == types.ASSIGN {
-				decodedMsg := network.JsonToMsg[types.Assign](cutMsg)
-				fmt.Println(decodedMsg)
+			switch types.MsgTypes(decodedMsgType) {
+			case types.BID:
+				/*
+				 * Handle bid
+				 */
+
+			case types.ASSIGN:
+				/*
+				 * Handle assign
+				 */
+				decodedMsgContent := network.JsonToMsg[types.Bid](msgContent)
+				fmt.Println("Received message: ", decodedMsgContent)
+
+			case types.REASSIGN:
+				/*
+				 * Handle reassign
+				 */
+
+			case types.SERVED:
+				/*
+				 * Handle served
+				 */
+
+			case types.SYNC:
+				/*
+				 * Handle sync
+				 */
 			}
 
 		/*
