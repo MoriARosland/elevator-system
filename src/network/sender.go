@@ -1,6 +1,9 @@
 package network
 
 import (
+	"bytes"
+	"elevator/types"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"strings"
@@ -14,7 +17,7 @@ const MSG_TIMEOUT = 2000
 /*
  *	Send message using UDP protocol to the sepcified address
  */
-func Send(addr string, msg []byte) {
+func Send(addr string, msgType types.MsgTypes, msg []byte) {
 	if addr == "" {
 		return
 	}
@@ -31,7 +34,14 @@ func Send(addr string, msg []byte) {
 		panic(err)
 	}
 
-	_, err = packetConnection.WriteTo(msg, resolvedAddr)
+	typeBuffer := make([]byte, 4)
+	binary.BigEndian.PutUint32(typeBuffer, uint32(msgType))
+
+	byteSlice := [][]byte{typeBuffer, msg}
+	seperator := []byte(",")
+	jointBytes := bytes.Join(byteSlice, seperator)
+
+	_, err = packetConnection.WriteTo(jointBytes, resolvedAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -43,13 +53,14 @@ func Send(addr string, msg []byte) {
  */
 func SecureSend(
 	initialAddr string,
+	msgType types.MsgTypes,
 	msg []byte,
 	replyReceived <-chan bool,
 	updateAddr <-chan string,
 ) {
 	addr := initialAddr
 
-	Send(addr, msg)
+	Send(addr, msgType, msg)
 
 	msgTimedOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
 
@@ -63,7 +74,7 @@ func SecureSend(
 			return
 
 		case <-msgTimedOut.C:
-			Send(addr, msg)
+			Send(addr, msgType, msg)
 
 		default:
 			/*

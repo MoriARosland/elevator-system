@@ -11,7 +11,7 @@ const BUFFER_SIZE = 1024
 /*
  * Listen for incoming messages on specified IP and port.
  */
-func ListenForMessages(ip string, port int, messageChannelchan chan<- []byte) {
+func ListenForMessages(ip string, port int, messageChannel chan<- []byte) {
 	conn, err := reuseport.ListenPacket("udp4", fmt.Sprintf("%s:%d", ip, port))
 
 	if err != nil {
@@ -29,6 +29,6 @@ func ListenForMessages(ip string, port int, messageChannelchan chan<- []byte) {
 			panic(err)
 		}
 
-		messageChannelchan <- buffer
+		messageChannel <- buffer
 	}
 }

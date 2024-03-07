@@ -2,11 +2,13 @@ package main
 
 import (
 	"Driver-go/elevio"
+	"bytes"
 	"elevator/elev"
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"os"
@@ -185,42 +187,33 @@ func main() {
 			elevState.DoorObstr = isObstructed
 
 			/*
-			* Test MsgToJson() og JsonToMsg()
+			 * Test MsgToJson() og JsonToMsg()
 			 */
 
-			bid := types.Bid{
-				Order:        types.Order{Floor: 1, Button: 2},
-				TimeToServed: []int{1, 2, 3},
+			msg := types.Msg[types.Assign]{
+				AuthorID: 1,
+				Content: types.Assign{
+					Order:    types.Order{Floor: 1, Button: 2},
+					Assignee: 17,
+				},
 			}
 
-			assign := types.Assign{
-				Order:    types.Order{Floor: 2, Button: 0},
-				Assignee: 1,
-			}
-
-			encoded_msg := network.MsgToJson(bid, 1)
-			decoded_msg := network.JsonToMsg(encoded_msg)
-
-			fmt.Print("\n", decoded_msg, "\n\n")
-			fmt.Print(decoded_msg.Content, "\n")
-
-			encoded_msg = network.MsgToJson(assign, 1)
-			decoded_msg = network.JsonToMsg(encoded_msg)
-
-			encoded_msg = network.MsgToJson(decoded_msg.Content, 2)
-			decoded_msg = network.JsonToMsg(encoded_msg)
-
-			encoded_msg = network.MsgToJson(decoded_msg.Content, 3)
-			decoded_msg = network.JsonToMsg(encoded_msg)
-
-			fmt.Print("\n", decoded_msg, "\n\n")
-			fmt.Print(decoded_msg.Content, "\n")
+			encoded := msg.MsgToJson()
+			network.Send(elevState.NextNode.Addr, types.ASSIGN, encoded)
 
 		/*
 		 * Handle incomming UDP messages
 		 */
-		case <-incomingMessageChannel:
-			continue
+		case msg := <-incomingMessageChannel:
+			seperator := []byte(",")
+			msgType, cutMsg, _ := bytes.Cut(msg, seperator)
+
+			decodedType := binary.BigEndian.Uint32(msgType)
+
+			if types.MsgTypes(decodedType) == types.ASSIGN {
+				decodedMsg := network.JsonToMsg[types.Assign](cutMsg)
+				fmt.Println(decodedMsg)
+			}
 
 		/*
 		 * Handle door time outs
