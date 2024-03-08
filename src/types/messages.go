@@ -36,6 +36,7 @@ type Served struct {
 
 type Sync struct {
 	Orders [][][]bool
+	Target NextNode
 }
 
 type Content interface {
