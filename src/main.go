@@ -113,9 +113,17 @@ func main() {
 	)
 
 	/*
-	 * Channels used by secure send
+	 * Setup secure message sending
 	 */
 	updateNextNodeAddr := make(chan string)
+	replyReceived := make(chan types.Header)
+	sendSecureMsg := make(chan []byte)
+
+	go network.SecureSend(
+		updateNextNodeAddr,
+		replyReceived,
+		sendSecureMsg,
+	)
 
 	/*
 	 * Main for/select
@@ -134,10 +142,7 @@ func main() {
 			}
 
 			elevState.NextNode = newNextNode
-
-			if elevState.WaitingForReply {
-				updateNextNodeAddr <- elevState.NextNode.Addr
-			}
+			updateNextNodeAddr <- elevState.NextNode.Addr
 
 		/*
 		 * Handle button presses
@@ -194,13 +199,20 @@ func main() {
 					Type:     types.ASSIGN,
 				},
 				Content: types.Assign{
-					Order:    types.Order{Floor: 1, Button: 2},
+					Order: types.Order{
+						Floor:  1,
+						Button: 2,
+					},
 					Assignee: 17,
 				},
 			}
 
 			encodedMsg := msg.ToJson()
-			network.Send(elevState.NextNode.Addr, encodedMsg)
+			sendSecureMsg <- encodedMsg
+
+			msg.Content.Assignee = 69
+			encodedMsg = msg.ToJson()
+			sendSecureMsg <- encodedMsg
 
 		/*
 		 * Handle incomming UDP messages
@@ -210,6 +222,12 @@ func main() {
 
 			if err != nil {
 				continue
+			}
+
+			isReply := header.AuthorID == elevConfig.NodeID
+
+			if isReply {
+				replyReceived <- *header
 			}
 
 			switch header.Type {
@@ -228,7 +246,11 @@ func main() {
 					continue
 				}
 
-				fmt.Println("Received message: ", decodedMsgContent)
+				fmt.Println("Received message: ", decodedMsgContent.Assignee)
+
+				if !isReply {
+					network.Send(elevState.NextNode.Addr, encodedMsg)
+				}
 
 			case types.REASSIGN:
 				/*

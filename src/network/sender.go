@@ -1,6 +1,7 @@
 package network
 
 import (
+	"elevator/types"
 	"fmt"
 	"net"
 	"strings"
@@ -38,32 +39,59 @@ func Send(addr string, msg []byte) {
 }
 
 /*
- * Send message to all nodes in the network
+ * Send message to next node and wait for reply
  * Resend if no reply is received within timeout
  */
 func SecureSend(
-	initialAddr string,
-	msg []byte,
-	replyReceived <-chan bool,
 	updateAddr <-chan string,
+	replyReceived <-chan types.Header,
+	msgChan <-chan []byte,
 ) {
-	addr := initialAddr
 
-	Send(addr, msg)
+	var addr string
+	var msgBuffer [][]byte
 
-	msgTimedOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
+	msgTimeOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
+	msgTimeOut.Stop()
 
 	for {
 		select {
 		case newAddr := <-updateAddr:
 			addr = newAddr
 
-		case <-replyReceived:
-			msgTimedOut.Stop()
-			return
+		case replyHeader := <-replyReceived:
+			msgHeader, _ := GetMsgHeader(msgBuffer[0])
 
-		case <-msgTimedOut.C:
-			Send(addr, msg)
+			validReply := replyHeader == *msgHeader
+
+			if !validReply {
+				continue
+			}
+
+			if len(msgBuffer) != 0 {
+				msgBuffer = msgBuffer[1:]
+			}
+
+			if len(msgBuffer) == 0 {
+				msgTimeOut.Stop()
+				continue
+			}
+
+			Send(addr, msgBuffer[0])
+			msgTimeOut.Reset(MSG_TIMEOUT * time.Millisecond)
+
+		case msg := <-msgChan:
+			msgBuffer = append(msgBuffer, msg)
+
+			if len(msgBuffer) == 1 {
+				Send(addr, msgBuffer[0])
+				msgTimeOut = time.NewTicker(MSG_TIMEOUT * time.Millisecond)
+			}
+
+		case <-msgTimeOut.C:
+			if len(msgBuffer) > 0 {
+				Send(addr, msgBuffer[0])
+			}
 
 		default:
 			/*
