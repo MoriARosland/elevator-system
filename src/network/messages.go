@@ -24,7 +24,7 @@ func GetMsgHeader(encodedMsg []byte) (*types.Header, error) {
 func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
 	var content T
 
-	encodedHeader := encodedMsg[:SIZE_OF_HEADER]
+	encodedHeader := encodedMsg[SIZE_OF_HEADER:]
 
 	err := json.Unmarshal(encodedHeader, &content)
 
