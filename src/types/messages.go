@@ -48,7 +48,7 @@ type Msg[T Content] struct {
 
 type MsgHeader struct {
 	Type     MsgTypes
-	AuthorID int
+	AuthorID int // must contain a single digit number [0, 9] in order to properly decode messages
 }
 
 func (msg Msg[T]) ToJson() ([]byte, error) {
