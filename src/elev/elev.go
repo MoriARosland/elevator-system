@@ -68,12 +68,11 @@ func UpdateState(
 	}
 
 	newState := types.ElevState{
-		Floor:           oldState.Floor,
-		Dirn:            stateChanges.ElevDirn,
-		DoorObstr:       oldState.DoorObstr,
-		Orders:          oldState.Orders,
-		NextNode:        oldState.NextNode,
-		WaitingForReply: oldState.WaitingForReply,
+		Floor:     oldState.Floor,
+		Dirn:      stateChanges.ElevDirn,
+		DoorObstr: oldState.DoorObstr,
+		Orders:    oldState.Orders,
+		NextNode:  oldState.NextNode,
 	}
 
 	for order, clearOrder := range stateChanges.ClearOrders {

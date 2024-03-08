@@ -7,7 +7,6 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -114,9 +113,17 @@ func main() {
 	)
 
 	/*
-	 * Channels used by secure send
+	 * Setup secure message sending
 	 */
 	updateNextNodeAddr := make(chan string)
+	replyReceived := make(chan types.Header)
+	sendSecureMsg := make(chan []byte)
+
+	go network.SecureSend(
+		updateNextNodeAddr,
+		replyReceived,
+		sendSecureMsg,
+	)
 
 	/*
 	 * Main for/select
@@ -135,10 +142,7 @@ func main() {
 			}
 
 			elevState.NextNode = newNextNode
-
-			if elevState.WaitingForReply {
-				updateNextNodeAddr <- elevState.NextNode.Addr
-			}
+			updateNextNodeAddr <- elevState.NextNode.Addr
 
 		/*
 		 * Handle button presses
@@ -190,39 +194,43 @@ func main() {
 			 */
 
 			msg := types.Msg[types.Assign]{
+				Header: types.Header{
+					AuthorID: elevConfig.NodeID,
+					Type:     types.ASSIGN,
+				},
 				Content: types.Assign{
-					Order:    types.Order{Floor: 1, Button: 2},
+					Order: types.Order{
+						Floor:  1,
+						Button: 2,
+					},
 					Assignee: 17,
 				},
 			}
 
-			encoded, err := msg.ToJson()
+			encodedMsg := msg.ToJson()
+			sendSecureMsg <- encodedMsg
 
-			if err != nil {
-				continue
-			}
-
-			network.Send(elevState.NextNode.Addr, elevConfig.NodeID, types.ASSIGN, encoded)
+			msg.Content.Assignee = 69
+			encodedMsg = msg.ToJson()
+			sendSecureMsg <- encodedMsg
 
 		/*
 		 * Handle incomming UDP messages
 		 */
-		case msg := <-incomingMessageChannel:
-			sizeofHeader := 23
+		case encodedMsg := <-incomingMessageChannel:
+			header, err := network.GetMsgHeader(encodedMsg)
 
-			encodedMsgHeader, encodedMsgContent := msg[:sizeofHeader], msg[sizeofHeader:]
-
-			var msgHeader types.MsgHeader
-			err = json.Unmarshal(encodedMsgHeader, &msgHeader)
-
-			/*
-			 * Discard message if we cannot parse the header
-			 */
 			if err != nil {
 				continue
 			}
 
-			switch msgHeader.Type {
+			isReply := header.AuthorID == elevConfig.NodeID
+
+			if isReply {
+				replyReceived <- *header
+			}
+
+			switch header.Type {
 			case types.BID:
 				/*
 				 * Handle bid
@@ -232,13 +240,17 @@ func main() {
 				/*
 				 * Handle assign
 				 */
-				decodedMsgContent, err := network.JsonToMsg[types.Assign](encodedMsgContent)
+				decodedMsgContent, err := network.GetMsgContent[types.Assign](encodedMsg)
 
 				if err != nil {
 					continue
 				}
 
-				fmt.Println("Received message: ", decodedMsgContent)
+				fmt.Println("Received message: ", decodedMsgContent.Assignee)
+
+				if !isReply {
+					network.Send(elevState.NextNode.Addr, encodedMsg)
+				}
 
 			case types.REASSIGN:
 				/*
