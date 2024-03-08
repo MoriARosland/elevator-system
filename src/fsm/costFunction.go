@@ -9,9 +9,6 @@ import (
 
 const TRAVEL_TIME = 2000 // ms
 
-/*
- *
- */
 func deepCopy(obj types.ElevState, copy *types.ElevState) {
 	encodedObj, _ := json.Marshal(obj)
 	_ = json.Unmarshal(encodedObj, copy)
@@ -50,6 +47,9 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 			shouldClear := orders.ClearAtCurrentFloor(&elevSimState, elevConfig)
 
 			if order.Floor == elevSimState.Floor && shouldClear[order.Button] {
+				if 0 > duration {
+					duration = 0
+				}
 				return duration
 			}
 
