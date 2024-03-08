@@ -54,7 +54,7 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 }
 
 /*
- * 
+ * Takes in output from fsm, performs side effects and return new elev state
  */
 func UpdateState(
 	oldState *types.ElevState,
@@ -94,10 +94,6 @@ func UpdateState(
 			)
 		}
 	}
-
-	cabcalls := newState.Orders[elevConfig.NodeID]
-	SetCabLights(cabcalls, elevConfig)
-	SetHallLights(newState.Orders, elevConfig)
 
 	return &newState
 }
@@ -175,6 +171,7 @@ func OnOrderChanged(
 ) *types.ElevState {
 
 	elevState.Orders[assignee][order.Floor][order.Button] = newStatus
+
 	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
 	SetHallLights(elevState.Orders, elevConfig)
 

@@ -11,7 +11,7 @@ import (
 )
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 4
+const NUM_FLOORS = 6
 const DOOR_OPEN_DURATION = 3000
 
 func main() {
@@ -127,8 +127,14 @@ func main() {
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
+			if elevState.ProcessingOrder {
+				continue
+			}
+
+			elevState.ProcessingOrder = true
+
 			/*
-			 * Cab calls are directly selfassigned
+			 * Cab orders are directly selfassigned
 			 */
 			if newOrder.Button == elevio.BT_Cab {
 				sendSecureMsg <- network.FormatAssignMsg(
@@ -136,7 +142,19 @@ func main() {
 					elevConfig.NodeID,
 					elevConfig.NodeID,
 				)
+
+				continue
 			}
+
+			/*
+			 * Hall orders are assigned after a bidding round
+			 */
+			sendSecureMsg <- network.FormatBidMsg(
+				nil,
+				newOrder,
+				elevConfig.NumNodes,
+				elevConfig.NodeID,
+			)
 
 		/*
 		 * Handle floor arrivals
@@ -186,6 +204,36 @@ func main() {
 				/*
 				 * Handle bid
 				 */
+				bidMsg, err := network.GetMsgContent[types.Bid](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
+					elevState,
+					elevConfig,
+					bidMsg.Order,
+				)
+
+				if isReply {
+					assignee := MinTimeToServed(bidMsg.TimeToServed)
+
+					sendSecureMsg <- network.FormatAssignMsg(
+						bidMsg.Order,
+						assignee,
+						elevConfig.NodeID,
+					)
+
+					continue
+				}
+
+				encodedMsg = network.FormatBidMsg(
+					bidMsg.TimeToServed,
+					bidMsg.Order,
+					elevConfig.NumNodes,
+					header.AuthorID,
+				)
 
 			case types.ASSIGN:
 				/*
@@ -205,8 +253,18 @@ func main() {
 					true,
 				)
 
+				/*
+				 * Make sure that the message is forwarded before updating
+				 * state in case the order is to be cleared immediately
+				 */
+				if !isReply {
+					network.Send(elevState.NextNode.Addr, encodedMsg)
+				} else {
+					elevState.ProcessingOrder = false
+				}
+
 				if assignMsg.Assignee != elevConfig.NodeID {
-					break
+					continue
 				}
 
 				fsmOutput := fsm.OnOrderAssigned(
@@ -221,6 +279,8 @@ func main() {
 					fsmOutput,
 					sendSecureMsg,
 				)
+
+				continue
 
 			case types.REASSIGN:
 				/*
