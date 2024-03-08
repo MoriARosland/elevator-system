@@ -63,3 +63,28 @@ func FormatServedMsg(order types.Order, author int) []byte {
 
 	return msg.ToJson()
 }
+
+func FormatBidMsg(order types.Order, numNodes int, author int) []byte {
+	timeToServed := make([]int, numNodes)
+
+	/*
+	 * Dead nodes will not add their time to served
+	 * -> value of -1 means we can ignore the value
+	 */
+	for NodeID := range timeToServed {
+		timeToServed[NodeID] = -1
+	}
+
+	msg := types.Msg[types.Bid]{
+		Header: types.Header{
+			Type:     types.BID,
+			AuthorID: author,
+		},
+		Content: types.Bid{
+			Order:        order,
+			TimeToServed: timeToServed,
+		},
+	}
+
+	return msg.ToJson()
+}
