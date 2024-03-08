@@ -1,9 +1,6 @@
 package network
 
 import (
-	"bytes"
-	"elevator/types"
-	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -17,7 +14,7 @@ const MSG_TIMEOUT = 2000
 /*
  *	Send message using UDP protocol to the sepcified address
  */
-func Send(addr string, authorID int, msgType types.MsgTypes, msgContent []byte) {
+func Send(addr string, msg []byte) {
 	if addr == "" {
 		return
 	}
@@ -34,26 +31,7 @@ func Send(addr string, authorID int, msgType types.MsgTypes, msgContent []byte) 
 		panic(err)
 	}
 
-	/*
-	 * Add type message type as an integer at the start of the byte array
-	 */
-	msgHeader := types.MsgHeader{
-		Type:     msgType,
-		AuthorID: authorID,
-	}
-
-	encodedMsgHeader, err := json.Marshal(msgHeader)
-
-	if err != nil {
-		panic(err)
-	}
-
-	msgAndHeaderBuffer := [][]byte{encodedMsgHeader, msgContent}
-	seperator := []byte("")
-
-	encodedMsg := bytes.Join(msgAndHeaderBuffer, seperator)
-
-	_, err = packetConnection.WriteTo(encodedMsg, resolvedAddr)
+	_, err = packetConnection.WriteTo(msg, resolvedAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -65,15 +43,13 @@ func Send(addr string, authorID int, msgType types.MsgTypes, msgContent []byte) 
  */
 func SecureSend(
 	initialAddr string,
-	authorID int,
-	msgType types.MsgTypes,
 	msg []byte,
 	replyReceived <-chan bool,
 	updateAddr <-chan string,
 ) {
 	addr := initialAddr
 
-	Send(addr, authorID, msgType, msg)
+	Send(addr, msg)
 
 	msgTimedOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
 
@@ -87,7 +63,7 @@ func SecureSend(
 			return
 
 		case <-msgTimedOut.C:
-			Send(addr, authorID, msgType, msg)
+			Send(addr, msg)
 
 		default:
 			/*

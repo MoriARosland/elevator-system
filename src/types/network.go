@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/json"
 )
 
@@ -38,25 +39,34 @@ type Sync struct {
 	Orders [][][]bool
 }
 
+type Header struct {
+	Type     MsgTypes
+	AuthorID int // must contain a single digit number [0, 9] in order to properly decode messages
+}
+
 type Content interface {
 	Bid | Assign | Reassign | Served | Sync
 }
 
 type Msg[T Content] struct {
+	Header  Header
 	Content T
 }
 
-type MsgHeader struct {
-	Type     MsgTypes
-	AuthorID int // must contain a single digit number [0, 9] in order to properly decode messages
-}
-
-func (msg Msg[T]) ToJson() ([]byte, error) {
-	encodedMsg, err := json.Marshal(msg)
+func (msg Msg[T]) ToJson() []byte {
+	encodedContent, err := json.Marshal(msg.Content)
 
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	return encodedMsg, nil
+	encodedHeader, err := json.Marshal(msg.Header)
+
+	if err != nil {
+		panic(err)
+	}
+
+	separator := []byte("")
+
+	return bytes.Join([][]byte{encodedHeader, encodedContent}, separator)
 }
