@@ -89,7 +89,7 @@ func MonitorNextNode(
 					break
 				}
 
-				if nextNodeID+1 == prevNodeID {
+				if nextNodeID == prevNodeID {
 					updateNextNode <- types.NextNode{ID: -1, Addr: ""}
 					continue
 				}
