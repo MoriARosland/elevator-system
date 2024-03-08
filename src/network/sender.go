@@ -60,6 +60,10 @@ func SecureSend(
 			addr = newAddr
 
 		case replyHeader := <-replyReceived:
+			if len(msgBuffer) == 0 {
+				continue
+			}
+
 			msgHeader, _ := GetMsgHeader(msgBuffer[0])
 
 			validReply := replyHeader == *msgHeader
@@ -68,9 +72,7 @@ func SecureSend(
 				continue
 			}
 
-			if len(msgBuffer) != 0 {
-				msgBuffer = msgBuffer[1:]
-			}
+			msgBuffer = msgBuffer[1:]
 
 			if len(msgBuffer) == 0 {
 				msgTimeOut.Stop()
