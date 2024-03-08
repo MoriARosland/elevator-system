@@ -24,7 +24,7 @@ func MonitorNextNode(
 	nextNodeID int,
 	selfDestruct <-chan bool,
 	updateNextNode chan<- types.NextNode,
-	syncWithNetwork chan<- bool,
+	syncWithNetwork chan<- types.NextNode,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
@@ -73,13 +73,14 @@ func MonitorNextNode(
 			 * UDP read successful, the next node is alive
 			 */
 			if err == nil {
+				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
+
 				if hasSubroutine {
 					destroySubroutine <- true
 					hasSubroutine = false
-					syncWithNetwork <- true
+					syncWithNetwork <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
 				}
 
-				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
 				break
 			}
 
@@ -111,9 +112,11 @@ func MonitorNextNode(
 						nextNextNodeID,
 						destroySubroutine,
 						updateNextNode,
-						syncWithNetwork, // Verify this
+						syncWithNetwork,
 					)
 					hasSubroutine = true
+
+					fmt.Println("Spawned new subroutine to monitor node: ", nextNextNodeID)
 				}
 
 				updateNextNode <- types.NextNode{ID: -1, Addr: ""}

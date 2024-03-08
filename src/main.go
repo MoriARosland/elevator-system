@@ -87,6 +87,7 @@ func main() {
 	 * Monitor next nodes and update NextNode in elevConfig
 	 */
 	updateNextNode := make(chan types.NextNode)
+	syncWithNetwork := make(chan types.NextNode)
 
 	go network.MonitorNextNode(
 		elevConfig.NodeID,
@@ -95,6 +96,7 @@ func main() {
 		elev.FindNextNodeID(elevConfig),
 		make(chan bool),
 		updateNextNode,
+		syncWithNetwork,
 	)
 
 	/*
@@ -117,6 +119,7 @@ func main() {
 	 * Channels used by secure send
 	 */
 	updateNextNodeAddr := make(chan string)
+	replyReceived := make(chan bool)
 
 	/*
 	 * Main for/select
@@ -135,6 +138,7 @@ func main() {
 			}
 
 			elevState.NextNode = newNextNode
+			fmt.Println("Next node changed. Next node is now: ", elevState.NextNode.ID)
 
 			if elevState.WaitingForReply {
 				updateNextNodeAddr <- elevState.NextNode.Addr
@@ -208,6 +212,8 @@ func main() {
 		 * Handle incomming UDP messages
 		 */
 		case msg := <-incomingMessageChannel:
+
+			fmt.Println("Request incomming")
 			sizeofHeader := 23
 
 			encodedMsgHeader, encodedMsgContent := msg[:sizeofHeader], msg[sizeofHeader:]
@@ -220,6 +226,11 @@ func main() {
 			 */
 			if err != nil {
 				continue
+			}
+
+			if msgHeader.AuthorID == elevConfig.NodeID {
+				elevState.WaitingForReply = false
+				replyReceived <- true
 			}
 
 			switch msgHeader.Type {
@@ -254,7 +265,88 @@ func main() {
 				/*
 				 * Handle sync
 				 */
+
+				decodedMsgContent, err := network.JsonToMsg[types.Sync](encodedMsgContent)
+
+				if err != nil {
+					continue
+				}
+
+				target := decodedMsgContent.Content.Target
+				newOrders := decodedMsgContent.Content.Orders
+
+				if target.ID == elevConfig.NodeID {
+					fmt.Println("Received sync meessage. Updating orders...")
+
+					for elevator := range newOrders {
+						for floor := range newOrders[elevator] {
+							for btn := 0; btn < elevConfig.NumButtons; btn++ {
+								if btn == elevio.BT_Cab {
+									// Merge cab orders
+									elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn] || elevState.Orders[elevator][floor][btn]
+								} else {
+									// Overwrite hall orders
+									elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn]
+								}
+
+							}
+						}
+					}
+
+					fmt.Println("Orders updated.")
+				}
+
+				if msgHeader.AuthorID == elevConfig.NodeID {
+					fmt.Println("Sync complete.")
+					continue
+				}
+
+				// Acknowledge sync
+				network.Send(
+					elevState.NextNode.Addr,
+					msgHeader.AuthorID,
+					types.SYNC,
+					encodedMsgContent,
+				)
+
+				fmt.Println("Passing sync to", msgHeader.AuthorID, ".")
+				fmt.Println("Author: ", msgHeader.AuthorID, " | Target node: ", target.ID)
 			}
+
+		/*
+		 * Syncronize local request list with the network's latest list.
+		 */
+		case targetNode := <-syncWithNetwork:
+
+			if elevState.WaitingForReply {
+				continue
+			}
+
+			fmt.Println("Syncing orders with Node ", targetNode.ID, "...")
+
+			msg := types.Msg[types.Sync]{
+				Content: types.Sync{
+					Orders: elevState.Orders,
+					Target: targetNode,
+				},
+			}
+
+			encodedMsg, err := msg.ToJson()
+
+			if err != nil {
+				// TODO: handle error
+				continue
+			}
+
+			elevState.WaitingForReply = true
+			go network.SecureSend(
+				elevState.NextNode.Addr,
+				elevConfig.NodeID,
+				types.SYNC,
+				encodedMsg,
+				replyReceived,
+				updateNextNodeAddr,
+			)
 
 		/*
 		 * Handle door time outs
