@@ -24,6 +24,7 @@ func MonitorNextNode(
 	nextNodeID int,
 	selfDestruct <-chan bool,
 	updateNextNode chan<- types.NextNode,
+	syncWithNetwork chan<- bool,
 ) {
 	var prevNodeID int
 	hasSubroutine := false
@@ -75,6 +76,7 @@ func MonitorNextNode(
 				if hasSubroutine {
 					destroySubroutine <- true
 					hasSubroutine = false
+					syncWithNetwork <- true
 				}
 
 				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
@@ -109,6 +111,7 @@ func MonitorNextNode(
 						nextNextNodeID,
 						destroySubroutine,
 						updateNextNode,
+						syncWithNetwork, // Verify this
 					)
 					hasSubroutine = true
 				}
