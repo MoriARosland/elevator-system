@@ -196,7 +196,7 @@ func main() {
 				},
 			}
 
-			encoded, err := msg.MsgToJson()
+			encoded, err := msg.ToJson()
 
 			if err != nil {
 				continue

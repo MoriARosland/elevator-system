@@ -51,7 +51,7 @@ type MsgHeader struct {
 	AuthorID int
 }
 
-func (msg Msg[T]) MsgToJson() ([]byte, error) {
+func (msg Msg[T]) ToJson() ([]byte, error) {
 	encodedMsg, err := json.Marshal(msg)
 
 	if err != nil {
