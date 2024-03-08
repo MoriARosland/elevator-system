@@ -78,7 +78,7 @@ func MonitorNextNode(
 				}
 
 				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
-				break
+				continue
 			}
 
 			/*
@@ -89,32 +89,34 @@ func MonitorNextNode(
 					break
 				}
 
+				if nextNodeID+1 == prevNodeID {
+					updateNextNode <- types.NextNode{ID: -1, Addr: ""}
+					continue
+				}
+
 				/*
 				 * If we have not come full circle:
 				 * spawn new subroutine to monitor the "next" nextNode
 				 */
-				if nextNodeID != prevNodeID {
-					var nextNextNodeID int
+				var nextNextNodeID int
 
-					if nextNodeID+1 >= numNodes {
-						nextNextNodeID = 0
-					} else {
-						nextNextNodeID = nextNodeID + 1
-					}
-
-					go MonitorNextNode(
-						nodeID,
-						numNodes,
-						basePort,
-						nextNextNodeID,
-						destroySubroutine,
-						updateNextNode,
-					)
-					hasSubroutine = true
+				if nextNodeID+1 >= numNodes {
+					nextNextNodeID = 0
+				} else {
+					nextNextNodeID = nextNodeID + 1
 				}
 
-				updateNextNode <- types.NextNode{ID: -1, Addr: ""}
-				break
+				go MonitorNextNode(
+					nodeID,
+					numNodes,
+					basePort,
+					nextNextNodeID,
+					destroySubroutine,
+					updateNextNode,
+				)
+				hasSubroutine = true
+
+				continue
 			}
 
 			panic(err)
