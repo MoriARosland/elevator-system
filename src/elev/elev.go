@@ -34,19 +34,19 @@ func InitConfig(
 }
 
 func InitState(elevConfig *types.ElevConfig) *types.ElevState {
-	requests := make([][][]bool, elevConfig.NumNodes)
+	orders := make([][][]bool, elevConfig.NumNodes)
 
-	for elevator := range requests {
-		requests[elevator] = make([][]bool, elevConfig.NumFloors)
-		for floor := range requests[elevator] {
-			requests[elevator][floor] = make([]bool, elevConfig.NumButtons)
+	for elevator := range orders {
+		orders[elevator] = make([][]bool, elevConfig.NumFloors)
+		for floor := range orders[elevator] {
+			orders[elevator][floor] = make([]bool, elevConfig.NumButtons)
 		}
 	}
 
 	elevState := types.ElevState{
-		Floor:    -1,
-		Dirn:     elevio.MD_Stop,
-		Requests: requests,
+		Floor:  -1,
+		Dirn:   elevio.MD_Stop,
+		Orders: orders,
 	}
 
 	return &elevState
@@ -71,7 +71,7 @@ func UpdateState(
 		Floor:           oldState.Floor,
 		Dirn:            stateChanges.ElevDirn,
 		DoorObstr:       oldState.DoorObstr,
-		Requests:        oldState.Requests,
+		Orders:          oldState.Orders,
 		NextNode:        oldState.NextNode,
 		WaitingForReply: oldState.WaitingForReply,
 	}
@@ -79,13 +79,13 @@ func UpdateState(
 	for order, clearOrder := range stateChanges.ClearOrders {
 		if clearOrder {
 			// TODO: Handle order clearing correctly (sendSecure through network)
-			newState.Requests[elevConfig.NodeID][newState.Floor][order] = false
+			newState.Orders[elevConfig.NodeID][newState.Floor][order] = false
 		}
 	}
 
-	cabcalls := newState.Requests[elevConfig.NodeID]
+	cabcalls := newState.Orders[elevConfig.NodeID]
 	SetCabLights(cabcalls, elevConfig)
-	SetHallLights(newState.Requests, elevConfig)
+	SetHallLights(newState.Orders, elevConfig)
 
 	return &newState
 }
@@ -123,27 +123,27 @@ func FindNextNodeID(elevConfig *types.ElevConfig) int {
 	return nextNodeID
 }
 
-func SetHallLights(requests [][][]bool, elevConfig *types.ElevConfig) {
+func SetHallLights(orders [][][]bool, elevConfig *types.ElevConfig) {
 	// We are here skipping the cab buttons by subtracting 1 from elevConfig.NumButtons.
 	// See type ButtonType in lib/driver-go-master/elevio/elevator_io.go for reference.
 
-	combinedRequests := make([][]bool, elevConfig.NumFloors)
+	combinedOrders := make([][]bool, elevConfig.NumFloors)
 
-	for floor := range combinedRequests {
-		combinedRequests[floor] = make([]bool, elevConfig.NumButtons-1)
+	for floor := range combinedOrders {
+		combinedOrders[floor] = make([]bool, elevConfig.NumButtons-1)
 	}
 
-	for elevator := range requests {
-		for floor := range requests[elevator] {
+	for elevator := range orders {
+		for floor := range orders[elevator] {
 			for btn := 0; btn < elevConfig.NumButtons-1; btn++ {
-				combinedRequests[floor][btn] = requests[elevator][floor][btn] || combinedRequests[floor][btn]
+				combinedOrders[floor][btn] = orders[elevator][floor][btn] || combinedOrders[floor][btn]
 			}
 		}
 	}
 
-	for floor := range combinedRequests {
+	for floor := range combinedOrders {
 		for btn := 0; btn < elevConfig.NumButtons-1; btn++ {
-			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, combinedRequests[floor][btn])
+			elevio.SetButtonLamp(elevio.ButtonType(btn), floor, combinedOrders[floor][btn])
 		}
 	}
 }

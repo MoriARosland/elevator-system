@@ -10,6 +10,7 @@ var localIP string
 /*
  * Fetch the local IP address of the machine.
  * If the IP address has already been fetched, the function returns the cached value.
+ * This code is copied from: https://github.com/TTK4145/Network-go/blob/master/network/localip/localip.go
  */
 func LocalIP() (string, error) {
 	if localIP == "" {

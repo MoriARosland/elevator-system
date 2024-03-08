@@ -7,6 +7,7 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -142,13 +143,15 @@ func main() {
 		/*
 		 * Handle button presses
 		 */
-		case newOrder := <-drvButtons:
+		case buttonEvent := <-drvButtons:
+
 			/*
 			 * TODO: assign order properly
 			 */
-			elevState.Requests[elevConfig.NodeID][newOrder.Floor][newOrder.Button] = true
 
-			output := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
+			elevState.Orders[elevConfig.NodeID][buttonEvent.Floor][buttonEvent.Button] = true
+
+			output := fsm.OnOrderAssigned(buttonEvent, elevState, elevConfig)
 
 			elevState = elev.UpdateState(
 				elevState,
@@ -182,11 +185,76 @@ func main() {
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
 
+			/*
+			 * Test: send an assign message
+			 */
+
+			msg := types.Msg[types.Assign]{
+				Content: types.Assign{
+					Order:    types.Order{Floor: 1, Button: 2},
+					Assignee: 17,
+				},
+			}
+
+			encoded, err := msg.ToJson()
+
+			if err != nil {
+				continue
+			}
+
+			network.Send(elevState.NextNode.Addr, elevConfig.NodeID, types.ASSIGN, encoded)
+
 		/*
 		 * Handle incomming UDP messages
 		 */
-		case <-incomingMessageChannel:
-			continue
+		case msg := <-incomingMessageChannel:
+			sizeofHeader := 23
+
+			encodedMsgHeader, encodedMsgContent := msg[:sizeofHeader], msg[sizeofHeader:]
+
+			var msgHeader types.MsgHeader
+			err = json.Unmarshal(encodedMsgHeader, &msgHeader)
+
+			/*
+			 * Discard message if we cannot parse the header
+			 */
+			if err != nil {
+				continue
+			}
+
+			switch msgHeader.Type {
+			case types.BID:
+				/*
+				 * Handle bid
+				 */
+
+			case types.ASSIGN:
+				/*
+				 * Handle assign
+				 */
+				decodedMsgContent, err := network.JsonToMsg[types.Assign](encodedMsgContent)
+
+				if err != nil {
+					continue
+				}
+
+				fmt.Println("Received message: ", decodedMsgContent)
+
+			case types.REASSIGN:
+				/*
+				 * Handle reassign
+				 */
+
+			case types.SERVED:
+				/*
+				 * Handle served
+				 */
+
+			case types.SYNC:
+				/*
+				 * Handle sync
+				 */
+			}
 
 		/*
 		 * Handle door time outs
