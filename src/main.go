@@ -7,7 +7,7 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -190,26 +190,39 @@ func main() {
 			 */
 
 			msg := types.Msg[types.Assign]{
-				AuthorID: 1,
 				Content: types.Assign{
 					Order:    types.Order{Floor: 1, Button: 2},
 					Assignee: 17,
 				},
 			}
 
-			encoded := msg.MsgToJson()
-			network.Send(elevState.NextNode.Addr, types.ASSIGN, encoded)
+			encoded, err := msg.MsgToJson()
+
+			if err != nil {
+				continue
+			}
+
+			network.Send(elevState.NextNode.Addr, elevConfig.NodeID, types.ASSIGN, encoded)
 
 		/*
 		 * Handle incomming UDP messages
 		 */
 		case msg := <-incomingMessageChannel:
-			sizeofInt := 4
-			msgType, msgContent := msg[:sizeofInt], msg[sizeofInt:]
+			sizeofHeader := 23
 
-			decodedMsgType := binary.BigEndian.Uint32(msgType)
+			encodedMsgHeader, encodedMsgContent := msg[:sizeofHeader], msg[sizeofHeader:]
 
-			switch types.MsgTypes(decodedMsgType) {
+			var msgHeader types.MsgHeader
+			err = json.Unmarshal(encodedMsgHeader, &msgHeader)
+
+			/*
+			 * Discard message if we cannot parse the header
+			 */
+			if err != nil {
+				continue
+			}
+
+			switch msgHeader.Type {
 			case types.BID:
 				/*
 				 * Handle bid
@@ -219,7 +232,12 @@ func main() {
 				/*
 				 * Handle assign
 				 */
-				decodedMsgContent := network.JsonToMsg[types.Assign](msgContent)
+				decodedMsgContent, err := network.JsonToMsg[types.Assign](encodedMsgContent)
+
+				if err != nil {
+					continue
+				}
+
 				fmt.Println("Received message: ", decodedMsgContent)
 
 			case types.REASSIGN:

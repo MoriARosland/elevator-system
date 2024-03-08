@@ -3,7 +3,7 @@ package network
 import (
 	"bytes"
 	"elevator/types"
-	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -17,7 +17,7 @@ const MSG_TIMEOUT = 2000
 /*
  *	Send message using UDP protocol to the sepcified address
  */
-func Send(addr string, msgType types.MsgTypes, msgContent []byte) {
+func Send(addr string, authorID int, msgType types.MsgTypes, msgContent []byte) {
 	if addr == "" {
 		return
 	}
@@ -37,17 +37,23 @@ func Send(addr string, msgType types.MsgTypes, msgContent []byte) {
 	/*
 	 * Add type message type as an integer at the start of the byte array
 	 */
-	sizeofInt := 4
-	msgTypeBuffer := make([]byte, sizeofInt)
+	msgHeader := types.MsgHeader{
+		Type:     msgType,
+		AuthorID: authorID,
+	}
 
-	binary.BigEndian.PutUint32(msgTypeBuffer, uint32(msgType))
+	encodedMsgHeader, err := json.Marshal(msgHeader)
 
-	msgAndTypeBuffer := [][]byte{msgTypeBuffer, msgContent}
+	if err != nil {
+		panic(err)
+	}
+
+	msgAndHeaderBuffer := [][]byte{encodedMsgHeader, msgContent}
 	seperator := []byte("")
 
-	msgWithType := bytes.Join(msgAndTypeBuffer, seperator)
+	encodedMsg := bytes.Join(msgAndHeaderBuffer, seperator)
 
-	_, err = packetConnection.WriteTo(msgWithType, resolvedAddr)
+	_, err = packetConnection.WriteTo(encodedMsg, resolvedAddr)
 	if err != nil {
 		panic(err)
 	}
@@ -59,6 +65,7 @@ func Send(addr string, msgType types.MsgTypes, msgContent []byte) {
  */
 func SecureSend(
 	initialAddr string,
+	authorID int,
 	msgType types.MsgTypes,
 	msg []byte,
 	replyReceived <-chan bool,
@@ -66,7 +73,7 @@ func SecureSend(
 ) {
 	addr := initialAddr
 
-	Send(addr, msgType, msg)
+	Send(addr, authorID, msgType, msg)
 
 	msgTimedOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
 
@@ -80,7 +87,7 @@ func SecureSend(
 			return
 
 		case <-msgTimedOut.C:
-			Send(addr, msgType, msg)
+			Send(addr, authorID, msgType, msg)
 
 		default:
 			/*

@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 )
 
-func JsonToMsg[T types.Content](encoded []byte) types.Msg[T] {
+func JsonToMsg[T types.Content](encoded []byte) (*types.Msg[T], error) {
 	var msg types.Msg[T]
 
 	err := json.Unmarshal(encoded, &msg)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return msg
+	return &msg, nil
 }

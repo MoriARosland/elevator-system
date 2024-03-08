@@ -43,16 +43,20 @@ type Content interface {
 }
 
 type Msg[T Content] struct {
-	AuthorID int
-	Content  T
+	Content T
 }
 
-func (msg Msg[T]) MsgToJson() []byte {
+type MsgHeader struct {
+	Type     MsgTypes
+	AuthorID int
+}
+
+func (msg Msg[T]) MsgToJson() ([]byte, error) {
 	encodedMsg, err := json.Marshal(msg)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return encodedMsg
+	return encodedMsg, nil
 }
