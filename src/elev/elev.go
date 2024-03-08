@@ -54,8 +54,8 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 
 func UpdateState(
 	oldState *types.ElevState,
-	stateChanges types.FsmOutput,
 	elevConfig *types.ElevConfig,
+	stateChanges types.FsmOutput,
 ) *types.ElevState {
 
 	if stateChanges.SetMotor {
@@ -147,8 +147,22 @@ func SetHallLights(orders [][][]bool, elevConfig *types.ElevConfig) {
 	}
 }
 
-func SetCabLights(cabcalls [][]bool, elevConfig *types.ElevConfig) {
-	for floor := range cabcalls {
-		elevio.SetButtonLamp(elevio.BT_Cab, floor, cabcalls[floor][elevio.BT_Cab])
+func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
+	for floor := range orders {
+		elevio.SetButtonLamp(elevio.BT_Cab, floor, orders[floor][elevio.BT_Cab])
 	}
+}
+
+func OnOrderAssigned(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	assignee int,
+	order types.Order,
+) *types.ElevState {
+
+	elevState.Orders[assignee][order.Floor][order.Button] = true
+	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	SetHallLights(elevState.Orders, elevConfig)
+
+	return elevState
 }

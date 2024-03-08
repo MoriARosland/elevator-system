@@ -34,3 +34,18 @@ func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
 
 	return &content, nil
 }
+
+func FormatAssignMsg(order types.Order, assignee int, author int) []byte {
+	msg := types.Msg[types.Assign]{
+		Header: types.Header{
+			Type:     types.ASSIGN,
+			AuthorID: author,
+		},
+		Content: types.Assign{
+			Order:    order,
+			Assignee: assignee,
+		},
+	}
+
+	return msg.ToJson()
+}

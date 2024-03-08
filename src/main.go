@@ -7,33 +7,12 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"flag"
 	"fmt"
-	"os"
 )
 
 const NUM_BUTTONS = 3
 const NUM_FLOORS = 4
 const DOOR_OPEN_DURATION = 3000
-
-/*
- * Parse command line arguments
- */
-func parseCommandlineFlags() (int, int, int, int) {
-	nodeID := flag.Int("id", -1, "Node id")
-	numNodes := flag.Int("num", -1, "Number of nodes")
-	baseBroadcastPort := flag.Int("bport", -1, "Base Broadcasting port")
-	elevServerPort := flag.Int("sport", -1, "Elevator server port")
-
-	flag.Parse()
-
-	if *nodeID < 0 || *numNodes < 0 || *baseBroadcastPort < 0 || *elevServerPort < 0 {
-		fmt.Println("Missing flags, use flag -h to see usage")
-		os.Exit(1)
-	}
-
-	return *nodeID, *numNodes, *baseBroadcastPort, *elevServerPort
-}
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
@@ -147,21 +126,14 @@ func main() {
 		/*
 		 * Handle button presses
 		 */
-		case buttonEvent := <-drvButtons:
-
-			/*
-			 * TODO: assign order properly
-			 */
-
-			elevState.Orders[elevConfig.NodeID][buttonEvent.Floor][buttonEvent.Button] = true
-
-			output := fsm.OnOrderAssigned(buttonEvent, elevState, elevConfig)
-
-			elevState = elev.UpdateState(
-				elevState,
-				output,
-				elevConfig,
-			)
+		case newOrder := <-drvButtons:
+			if newOrder.Button == elevio.BT_Cab {
+				sendSecureMsg <- network.FormatAssignMsg(
+					newOrder,
+					elevConfig.NodeID,
+					elevConfig.NodeID,
+				)
+			}
 
 		/*
 		 * Handle floor arrivals
@@ -170,12 +142,12 @@ func main() {
 			elevState.Floor = newCurrentFloor
 			elevio.SetFloorIndicator(newCurrentFloor)
 
-			output := fsm.OnFloorArrival(elevState, elevConfig)
+			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
 
 			elevState = elev.UpdateState(
 				elevState,
-				output,
 				elevConfig,
+				fsmOutput,
 			)
 
 		/*
@@ -188,31 +160,6 @@ func main() {
 
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
-
-			/*
-			 * Test: send an assign message
-			 */
-
-			msg := types.Msg[types.Assign]{
-				Header: types.Header{
-					AuthorID: elevConfig.NodeID,
-					Type:     types.ASSIGN,
-				},
-				Content: types.Assign{
-					Order: types.Order{
-						Floor:  1,
-						Button: 2,
-					},
-					Assignee: 17,
-				},
-			}
-
-			encodedMsg := msg.ToJson()
-			sendSecureMsg <- encodedMsg
-
-			msg.Content.Assignee = 69
-			encodedMsg = msg.ToJson()
-			sendSecureMsg <- encodedMsg
 
 		/*
 		 * Handle incomming UDP messages
@@ -240,17 +187,34 @@ func main() {
 				/*
 				 * Handle assign
 				 */
-				decodedMsgContent, err := network.GetMsgContent[types.Assign](encodedMsg)
+				assignMsg, err := network.GetMsgContent[types.Assign](encodedMsg)
 
 				if err != nil {
 					continue
 				}
 
-				fmt.Println("Received message: ", decodedMsgContent.Assignee)
+				elevState = elev.OnOrderAssigned(
+					elevState,
+					elevConfig,
+					assignMsg.Assignee,
+					assignMsg.Order,
+				)
 
-				if !isReply {
-					network.Send(elevState.NextNode.Addr, encodedMsg)
+				if assignMsg.Assignee != elevConfig.NodeID {
+					break
 				}
+
+				fsmOutput := fsm.OnOrderAssigned(
+					assignMsg.Order,
+					elevState,
+					elevConfig,
+				)
+
+				elevState = elev.UpdateState(
+					elevState,
+					elevConfig,
+					fsmOutput,
+				)
 
 			case types.REASSIGN:
 				/*
@@ -268,6 +232,13 @@ func main() {
 				 */
 			}
 
+			/*
+			 * Forward message
+			 */
+			if !isReply {
+				network.Send(elevState.NextNode.Addr, encodedMsg)
+			}
+
 		/*
 		 * Handle door time outs
 		 */
@@ -279,12 +250,12 @@ func main() {
 				}
 				timer.Stop()
 
-				output := fsm.OnDoorTimeout(elevState, elevConfig)
+				fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
 
 				elevState = elev.UpdateState(
 					elevState,
-					output,
 					elevConfig,
+					fsmOutput,
 				)
 			}
 		}
