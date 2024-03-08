@@ -123,6 +123,9 @@ func main() {
 			elevState.NextNode = newNextNode
 			updateNextNodeAddr <- elevState.NextNode.Addr
 
+			fmt.Print("\033[J\033[2;0H\r  ")
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ", elevConfig.NodeID, elevState.NextNode.ID, elevState.NextNode.Addr)
+
 		/*
 		 * Handle button presses
 		 */
