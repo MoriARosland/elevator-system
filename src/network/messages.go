@@ -49,3 +49,17 @@ func FormatAssignMsg(order types.Order, assignee int, author int) []byte {
 
 	return msg.ToJson()
 }
+
+func FormatServedMsg(order types.Order, author int) []byte {
+	msg := types.Msg[types.Served]{
+		Header: types.Header{
+			Type:     types.SERVED,
+			AuthorID: author,
+		},
+		Content: types.Served{
+			Order: order,
+		},
+	}
+
+	return msg.ToJson()
+}

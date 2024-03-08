@@ -127,6 +127,9 @@ func main() {
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
+			/*
+			 * Cab calls are directly selfassigned
+			 */
 			if newOrder.Button == elevio.BT_Cab {
 				sendSecureMsg <- network.FormatAssignMsg(
 					newOrder,
@@ -148,6 +151,7 @@ func main() {
 				elevState,
 				elevConfig,
 				fsmOutput,
+				sendSecureMsg,
 			)
 
 		/*
@@ -193,11 +197,12 @@ func main() {
 					continue
 				}
 
-				elevState = elev.OnOrderAssigned(
+				elevState = elev.OnOrderChanged(
 					elevState,
 					elevConfig,
 					assignMsg.Assignee,
 					assignMsg.Order,
+					true,
 				)
 
 				if assignMsg.Assignee != elevConfig.NodeID {
@@ -214,6 +219,7 @@ func main() {
 					elevState,
 					elevConfig,
 					fsmOutput,
+					sendSecureMsg,
 				)
 
 			case types.REASSIGN:
@@ -225,6 +231,19 @@ func main() {
 				/*
 				 * Handle served
 				 */
+				servedMsg, err := network.GetMsgContent[types.Served](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				elevState = elev.OnOrderChanged(
+					elevState,
+					elevConfig,
+					header.AuthorID,
+					servedMsg.Order,
+					false,
+				)
 
 			case types.SYNC:
 				/*
@@ -240,7 +259,7 @@ func main() {
 			}
 
 		/*
-		 * Handle door time outs
+		 * Handle door timeouts
 		 */
 		default:
 			if timer.TimedOut() {
@@ -256,6 +275,7 @@ func main() {
 					elevState,
 					elevConfig,
 					fsmOutput,
+					sendSecureMsg,
 				)
 			}
 		}

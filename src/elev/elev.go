@@ -2,6 +2,7 @@ package elev
 
 import (
 	"Driver-go/elevio"
+	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
 	"errors"
@@ -52,10 +53,14 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 	return &elevState
 }
 
+/*
+ * 
+ */
 func UpdateState(
 	oldState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	stateChanges types.FsmOutput,
+	sendSecureMsg chan<- []byte,
 ) *types.ElevState {
 
 	if stateChanges.SetMotor {
@@ -75,10 +80,18 @@ func UpdateState(
 		NextNode:  oldState.NextNode,
 	}
 
+	/*
+	 * Clear served orders
+	 */
 	for order, clearOrder := range stateChanges.ClearOrders {
 		if clearOrder {
-			// TODO: Handle order clearing correctly (sendSecure through network)
-			newState.Orders[elevConfig.NodeID][newState.Floor][order] = false
+			sendSecureMsg <- network.FormatServedMsg(
+				types.Order{
+					Button: elevio.ButtonType(order),
+					Floor:  newState.Floor,
+				},
+				elevConfig.NodeID,
+			)
 		}
 	}
 
@@ -153,14 +166,15 @@ func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
 	}
 }
 
-func OnOrderAssigned(
+func OnOrderChanged(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	assignee int,
 	order types.Order,
+	newStatus bool,
 ) *types.ElevState {
 
-	elevState.Orders[assignee][order.Floor][order.Button] = true
+	elevState.Orders[assignee][order.Floor][order.Button] = newStatus
 	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
 	SetHallLights(elevState.Orders, elevConfig)
 
