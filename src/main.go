@@ -62,7 +62,8 @@ func main() {
 	go network.Broadcast(elevConfig.BroadcastPort)
 
 	/*
-	 * Monitor next nodes and update NextNode in elevConfig
+	 * Monitor next nodes and update NextNode in elevState
+	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
 
