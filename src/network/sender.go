@@ -59,6 +59,10 @@ func SecureSend(
 		case newAddr := <-updateAddr:
 			addr = newAddr
 
+			if addr == "" {
+				msgBuffer = nil
+			}
+
 		case replyHeader := <-replyReceived:
 			if len(msgBuffer) == 0 {
 				continue
