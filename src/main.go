@@ -8,6 +8,7 @@ import (
 	"elevator/timer"
 	"elevator/types"
 	"fmt"
+	"time"
 )
 
 const NUM_BUTTONS = 3
@@ -106,6 +107,18 @@ func main() {
 	)
 
 	/*
+	 * Setup times
+	 */
+	doorTimeout := make(chan bool)
+	doorTimer := make(chan types.TimerActions)
+
+	go timer.Timer(
+		DOOR_OPEN_DURATION*time.Millisecond,
+		doorTimeout,
+		doorTimer,
+	)
+
+	/*
 	 * Main for/select
 	 */
 	for {
@@ -178,6 +191,7 @@ func main() {
 				elevConfig,
 				fsmOutput,
 				sendSecureMsg,
+				doorTimer,
 			)
 
 		/*
@@ -188,7 +202,7 @@ func main() {
 				continue
 			}
 
-			timer.Start(elevConfig.DoorOpenDuration)
+			doorTimer <- types.START
 			elevState.DoorObstr = isObstructed
 
 		/*
@@ -286,6 +300,7 @@ func main() {
 					elevConfig,
 					fsmOutput,
 					sendSecureMsg,
+					doorTimer,
 				)
 
 				continue
@@ -329,23 +344,26 @@ func main() {
 		/*
 		 * Handle door timeouts
 		 */
-		default:
-			if timer.TimedOut() {
-				if elevState.DoorObstr {
-					timer.Start(elevConfig.DoorOpenDuration)
-					continue
-				}
-				timer.Stop()
-
-				fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
-
-				elevState = elev.UpdateState(
-					elevState,
-					elevConfig,
-					fsmOutput,
-					sendSecureMsg,
-				)
+		case <-doorTimeout:
+			if elevState.DoorObstr {
+				doorTimer <- types.START
+				continue
 			}
+			doorTimer <- types.STOP
+
+			fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
+
+			elevState = elev.UpdateState(
+				elevState,
+				elevConfig,
+				fsmOutput,
+				sendSecureMsg,
+				doorTimer,
+			)
+
+		default:
+			continue
+
 		}
 	}
 }

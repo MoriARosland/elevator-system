@@ -1,19 +1,42 @@
 package timer
 
-import "time"
+import (
+	"elevator/types"
+	"time"
+)
 
-var timerEndTime int64
-var timerActive bool
+func Timer(
+	duration time.Duration,
+	timeOut chan<- bool,
+	action <-chan types.TimerActions,
+) {
 
-func Start(duration int) {
-	timerEndTime = time.Now().UnixMilli() + int64(duration)
-	timerActive = true
-}
+	timer := time.NewTimer(duration)
+	timer.Stop()
 
-func Stop() {
-	timerActive = false
-}
+	for {
+		select {
+		/*
+		 * STOP and START timer
+		 */
+		case newAction := <-action:
+			switch newAction {
+			case types.START:
+				timer.Reset(duration)
 
-func TimedOut() bool {
-	return timerActive && time.Now().UnixMilli() > timerEndTime
+			case types.STOP:
+				timer.Stop()
+			}
+
+		/*
+		 * Timer timed out
+		 */
+		case <-timer.C:
+			timeOut <- true
+
+		default:
+			continue
+		}
+	}
+
 }
