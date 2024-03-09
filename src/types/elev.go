@@ -25,4 +25,5 @@ type ElevState struct {
 	Orders          [][][]bool
 	NextNode        NextNode
 	ProcessingOrder bool
+	Disconnected    bool
 }

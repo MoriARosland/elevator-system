@@ -73,11 +73,12 @@ func UpdateState(
 	}
 
 	newState := types.ElevState{
-		Floor:     oldState.Floor,
-		Dirn:      stateChanges.ElevDirn,
-		DoorObstr: oldState.DoorObstr,
-		Orders:    oldState.Orders,
-		NextNode:  oldState.NextNode,
+		Floor:        oldState.Floor,
+		Dirn:         stateChanges.ElevDirn,
+		DoorObstr:    oldState.DoorObstr,
+		Orders:       oldState.Orders,
+		NextNode:     oldState.NextNode,
+		Disconnected: oldState.Disconnected,
 	}
 
 	/*

@@ -59,14 +59,14 @@ func main() {
 	/*
 	 * Start "I'm alive" broadcasting
 	 */
-	go network.Broadcast(elevConfig.BroadcastPort)
+	networkDisconnectedChannel := make(chan bool)
+	go network.Broadcast(elevConfig.BroadcastPort, networkDisconnectedChannel)
 
 	/*
 	 * Monitor next nodes and update NextNode in elevState
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-
 	go network.MonitorNextNode(
 		elevConfig.NodeID,
 		elevConfig.NumNodes,
@@ -80,16 +80,17 @@ func main() {
 	 * Continuously listen for messages from previous node
 	 */
 	localIP, err := network.LocalIP()
-
 	if err != nil {
 		panic(err)
 	}
 
 	incomingMessageChannel := make(chan []byte)
+	listenFunctionDisconnectedChannel := make(chan bool)
 	go network.ListenForMessages(
 		localIP,
 		elevConfig.BroadcastPort,
 		incomingMessageChannel,
+		listenFunctionDisconnectedChannel,
 	)
 
 	/*
@@ -98,11 +99,13 @@ func main() {
 	updateNextNodeAddr := make(chan string)
 	replyReceived := make(chan types.Header)
 	sendSecureMsg := make(chan []byte)
+	sendFunctionDisconnectChannel := make(chan bool)
 
 	go network.SecureSend(
 		updateNextNodeAddr,
 		replyReceived,
 		sendSecureMsg,
+		sendFunctionDisconnectChannel,
 	)
 
 	/*
@@ -110,6 +113,7 @@ func main() {
 	 */
 	for {
 		select {
+
 		/*
 		 * Handle new next node
 		 */
@@ -132,9 +136,43 @@ func main() {
 			)
 
 		/*
+		 * Update elevators disconnect state
+		 */
+		case networkDisconnected := <-networkDisconnectedChannel:
+			elevState.Disconnected = networkDisconnected
+			listenFunctionDisconnectedChannel <- networkDisconnected
+			sendFunctionDisconnectChannel <- networkDisconnected
+
+		/*
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
+
+			/*
+			 * If elevator is disconnected from the network it should only accept orders from its own cab
+			 */
+			if elevState.Disconnected {
+				if newOrder.Button == elevio.BT_Cab {
+					elevState = elev.OnOrderChanged(
+						elevState,
+						elevConfig,
+						elevConfig.NodeID,
+						newOrder,
+						true,
+					)
+					
+					fsmOutput := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
+
+					elevState = elev.UpdateState(
+						elevState,
+						elevConfig,
+						fsmOutput,
+						sendSecureMsg,
+					)
+				}
+				continue
+			}
+
 			if elevState.ProcessingOrder {
 				continue
 			}

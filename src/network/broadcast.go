@@ -14,7 +14,7 @@ const BROADCAST_INTERVAL = 100
 /*
  * Broadcasts "I'm alive" on specified port.
  */
-func Broadcast(port int) {
+func Broadcast(port int, networkDisconnectChannel chan bool) {
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", port))
 
 	if err != nil {
@@ -28,13 +28,23 @@ func Broadcast(port int) {
 		panic(err)
 	}
 
+	networkDisconnect := false
+	oldNetworkDisconnect := false
+
 	for {
 		time.Sleep(BROADCAST_INTERVAL * time.Millisecond)
 
 		_, err := packetConnection.WriteTo([]byte(""), addr)
 
 		if err != nil {
-			panic(err)
+			networkDisconnect = true
+		} else {
+			networkDisconnect = false // set to true for test purposes
+		}
+
+		if networkDisconnect != oldNetworkDisconnect {
+			networkDisconnectChannel <- networkDisconnect
+			oldNetworkDisconnect = networkDisconnect
 		}
 	}
 }
