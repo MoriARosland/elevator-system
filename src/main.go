@@ -96,11 +96,9 @@ func main() {
 	/*
 	 * In case we start between two floors
 	 */
-	currentFloor := elevio.GetFloor()
-	if 0 > currentFloor {
+	if 0 > elevio.GetFloor() {
 		elevio.SetMotorDirection(elevio.MD_Down)
 		elevState.Dirn = elevio.MD_Down
-
 		fsm.OnInitBetweenFloors()
 	}
 
@@ -130,9 +128,6 @@ func main() {
 		 * Handle new next node
 		 */
 		case newNextNode := <-updateNextNode:
-			/*
-			 * TODO: handle reassignment of the dead nodes hall orders
-			 */
 			if elevState.NextNode == newNextNode {
 				continue
 			}
@@ -356,17 +351,20 @@ func main() {
 					syncMsg.Orders,
 				)
 
-				if elevState.Dirn == elevio.MD_Stop {
-					fsmOutput := fsm.OnSync(elevState, elevConfig)
-
-					elevState = elev.UpdateState(
-						elevState,
-						elevConfig,
-						fsmOutput,
-						sendSecureMsg,
-						doorTimer,
-					)
+				if elevState.Dirn != elevio.MD_Stop {
+					break
 				}
+
+				fsmOutput := fsm.OnSync(elevState, elevConfig)
+
+				elevState = elev.UpdateState(
+					elevState,
+					elevConfig,
+					fsmOutput,
+					sendSecureMsg,
+					doorTimer,
+				)
+
 			}
 
 			/*
