@@ -41,15 +41,10 @@ func main() {
 	/*
 	 * Continuously listen for messages from previous node
 	 */
-	localIP, err := network.LocalIP()
-
-	if err != nil {
-		panic(err)
-	}
-
 	incomingMessageChannel := make(chan []byte)
+
 	go network.ListenForMessages(
-		localIP,
+		network.LocalIP(),
 		elevConfig.BroadcastPort,
 		incomingMessageChannel,
 	)
