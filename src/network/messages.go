@@ -64,9 +64,14 @@ func FormatServedMsg(order types.Order, author int) []byte {
 	return msg.ToJson()
 }
 
-func FormatBidMsg(timeToServed []int, order types.Order, NumNodes int, author int) []byte {
-	if len(timeToServed) == 0 {
+func FormatBidMsg(
+	timeToServed []int,
+	order types.Order,
+	NumNodes int,
+	author int,
+) []byte {
 
+	if len(timeToServed) == 0 {
 		timeToServed = make([]int, NumNodes)
 
 		for NodeID := range timeToServed {
@@ -88,15 +93,15 @@ func FormatBidMsg(timeToServed []int, order types.Order, NumNodes int, author in
 	return msg.ToJson()
 }
 
-func FormatSyncMsg(target types.NextNode, orders [][][]bool, author int) []byte {
+func FormatSyncMsg(targetID int, orders [][][]bool, author int) []byte {
 	msg := types.Msg[types.Sync]{
 		Header: types.Header{
 			Type:     types.SYNC,
 			AuthorID: author,
 		},
 		Content: types.Sync{
-			Orders: orders,
-			Target: target,
+			Orders:   orders,
+			TargetID: targetID,
 		},
 	}
 

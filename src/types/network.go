@@ -36,8 +36,8 @@ type Served struct {
 }
 
 type Sync struct {
-	Orders [][][]bool
-	Target NextNode
+	Orders   [][][]bool
+	TargetID int
 }
 
 /*

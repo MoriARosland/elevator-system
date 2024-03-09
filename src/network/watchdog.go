@@ -18,31 +18,26 @@ const BUF_SIZE = 2
  * alive is updated on the updateNextNode channel.
  */
 func MonitorNextNode(
-	nodeID int,
-	numNodes int,
-	basePort int,
+	elevConfig *types.ElevConfig,
 	nextNodeID int,
-	selfDestruct <-chan bool,
-	updateNextNode chan<- types.NextNode,
-	terminationComplete chan bool,
-	syncWithNetwork chan<- types.NextNode,
-) {
-	var prevNodeID int
 
-	if nodeID == 0 {
-		prevNodeID = numNodes - 1
-	} else {
-		prevNodeID = nodeID - 1
-	}
+	updateNextNode chan<- types.NextNode,
+	syncNextNode chan<- int,
+
+	terminationComplete chan bool,
+	selfDestruct <-chan bool,
+) {
 
 	hasSubroutine := false
 	isAlive := true
 
 	destroySubroutine := make(chan bool)
 
-	buf := make([]byte, BUF_SIZE)
+	msgBuffer := make([]byte, BUF_SIZE)
 
+	basePort := elevConfig.BroadcastPort - elevConfig.NodeID
 	nextNodePort := basePort + nextNodeID
+
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", nextNodePort))
 
 	if err != nil {
@@ -73,12 +68,16 @@ func MonitorNextNode(
 				panic(err)
 			}
 
-			_, addr, err := packetConnection.ReadFrom(buf)
+			_, addr, err := packetConnection.ReadFrom(msgBuffer)
 
 			/*
 			 * UDP read successful, the next node is alive
 			 */
 			if err == nil {
+				/*
+				 * Destroy all subroutines
+				 * Blocks until all routines are dead
+				 */
 				if hasSubroutine {
 					destroySubroutine <- true
 					<-terminationComplete
@@ -91,10 +90,7 @@ func MonitorNextNode(
 				}
 
 				if !isAlive {
-					syncWithNetwork <- types.NextNode{
-						ID:   nextNodeID,
-						Addr: addr.String(),
-					}
+					syncNextNode <- nextNodeID
 				}
 
 				isAlive = true
@@ -103,6 +99,9 @@ func MonitorNextNode(
 
 			isAlive = false
 
+			/*
+			 * Error is not a timeout error
+			 */
 			nErr, ok := err.(net.Error)
 			if !ok || !nErr.Timeout() {
 				panic(err)
@@ -111,11 +110,15 @@ func MonitorNextNode(
 			/*
 			 * UDP read timed out
 			 */
+
 			if hasSubroutine {
 				continue
 			}
 
-			if nextNodeID == prevNodeID {
+			/*
+			 * There are no other nodes alive
+			 */
+			if nextNodeID == calcPrevNodeID(elevConfig) {
 				updateNextNode <- types.NextNode{
 					ID:   -1,
 					Addr: "",
@@ -127,26 +130,42 @@ func MonitorNextNode(
 			 * If we have not come full circle:
 			 * spawn new subroutine to monitor the "next" nextNode
 			 */
-			var nextNextNodeID int
-
-			if nextNodeID+1 >= numNodes {
-				nextNextNodeID = 0
-			} else {
-				nextNextNodeID = nextNodeID + 1
-			}
-
 			go MonitorNextNode(
-				nodeID,
-				numNodes,
-				basePort,
-				nextNextNodeID,
-				destroySubroutine,
+				elevConfig,
+				calcNextNodeID(elevConfig, nextNodeID),
+
 				updateNextNode,
+				syncNextNode,
+
 				terminationComplete,
-				syncWithNetwork,
+				destroySubroutine,
 			)
 
 			hasSubroutine = true
 		}
 	}
+}
+
+func calcPrevNodeID(elevConfig *types.ElevConfig) int {
+	var prevNodeID int
+
+	if elevConfig.NodeID == 0 {
+		prevNodeID = elevConfig.NumNodes - 1
+	} else {
+		prevNodeID = elevConfig.NodeID - 1
+	}
+
+	return prevNodeID
+}
+
+func calcNextNodeID(elevConfig *types.ElevConfig, nodeID int) int {
+	var nextNodeID int
+
+	if nodeID+1 >= elevConfig.NumNodes {
+		nextNodeID = 0
+	} else {
+		nextNodeID = nodeID + 1
+	}
+
+	return nextNodeID
 }

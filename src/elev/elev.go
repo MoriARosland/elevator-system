@@ -179,6 +179,10 @@ func OnOrderChanged(
 	return elevState
 }
 
+/*
+ * Merges incoming order list with the current order list
+ * Hall orders are overwritten while cab orders are ored
+ */
 func OnSync(elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	newOrders [][][]bool,

@@ -65,17 +65,17 @@ func main() {
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-	syncNextNode := make(chan types.NextNode)
+	syncNextNode := make(chan int)
 
 	go network.MonitorNextNode(
-		elevConfig.NodeID,
-		elevConfig.NumNodes,
-		baseBroadcastPort,
+		elevConfig,
 		elev.FindNextNodeID(elevConfig),
-		make(chan bool),
+
 		updateNextNode,
-		make(chan bool),
 		syncNextNode,
+
+		make(chan bool),
+		make(chan bool),
 	)
 
 	/*
@@ -96,11 +96,14 @@ func main() {
 	 */
 	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevServerPort, elevConfig.NumFloors)
 
+	/*
+	 * Wait until we know the status of the other nodes in the circle
+	 */
 	elevState.NextNode = <-updateNextNode
 	updateNextNodeAddr <- elevState.NextNode.Addr
 
 	/*
-	 * Reset elevator to known state
+	 * In case we start between two floors
 	 */
 	currentFloor := elevio.GetFloor()
 	if 0 > currentFloor {
@@ -110,6 +113,9 @@ func main() {
 		fsm.OnInitBetweenFloors()
 	}
 
+	/*
+	 * Reset elevator to known state
+	 */
 	elevio.SetDoorOpenLamp(false)
 	elev.SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
 	elev.SetHallLights(elevState.Orders, elevConfig)
@@ -127,11 +133,11 @@ func main() {
 	)
 
 	/*
-	 * Start "I'm alive" broadcasting
+	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
 	 */
 	go network.Broadcast(elevConfig.BroadcastPort)
 
-	fmt.Println("Setup complete")
+	printNextNode(elevState, elevConfig)
 
 	/*
 	 * Main for/select
@@ -151,6 +157,8 @@ func main() {
 
 			elevState.NextNode = newNextNode
 			updateNextNodeAddr <- elevState.NextNode.Addr
+
+			printNextNode(elevState, elevConfig)
 
 		/*
 		 * Sync new next node
@@ -257,7 +265,7 @@ func main() {
 				)
 
 				if isReply {
-					assignee := MinTimeToServed(bidMsg.TimeToServed)
+					assignee := minTimeToServed(bidMsg.TimeToServed)
 
 					sendSecureMsg <- network.FormatAssignMsg(
 						bidMsg.Order,
@@ -356,7 +364,7 @@ func main() {
 					continue
 				}
 
-				if syncMsg.Target.ID != elevConfig.NodeID {
+				if syncMsg.TargetID != elevConfig.NodeID {
 					break
 				}
 
@@ -377,7 +385,6 @@ func main() {
 						doorTimer,
 					)
 				}
-
 			}
 
 			/*
@@ -408,8 +415,10 @@ func main() {
 			)
 
 		default:
+			/*
+			 * Do nothing
+			 */
 			continue
-
 		}
 	}
 }
