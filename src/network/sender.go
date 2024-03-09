@@ -1,9 +1,7 @@
 package network
 
 import (
-	"bytes"
 	"elevator/types"
-	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -17,7 +15,7 @@ const MSG_TIMEOUT = 2000
 /*
  *	Send message using UDP protocol to the sepcified address
  */
-func Send(addr string, authorID int, msgType types.MsgTypes, msgContent []byte) {
+func Send(addr string, msg []byte) {
 	if addr == "" {
 		return
 	}
@@ -34,60 +32,72 @@ func Send(addr string, authorID int, msgType types.MsgTypes, msgContent []byte) 
 		panic(err)
 	}
 
-	/*
-	 * Add type message type as an integer at the start of the byte array
-	 */
-	msgHeader := types.MsgHeader{
-		Type:     msgType,
-		AuthorID: authorID,
-	}
-
-	encodedMsgHeader, err := json.Marshal(msgHeader)
-
-	if err != nil {
-		panic(err)
-	}
-
-	msgAndHeaderBuffer := [][]byte{encodedMsgHeader, msgContent}
-	seperator := []byte("")
-
-	encodedMsg := bytes.Join(msgAndHeaderBuffer, seperator)
-
-	_, err = packetConnection.WriteTo(encodedMsg, resolvedAddr)
+	_, err = packetConnection.WriteTo(msg, resolvedAddr)
 	if err != nil {
 		panic(err)
 	}
 }
 
 /*
- * Send message to all nodes in the network
+ * Send message to next node and wait for reply
  * Resend if no reply is received within timeout
  */
 func SecureSend(
-	initialAddr string,
-	authorID int,
-	msgType types.MsgTypes,
-	msg []byte,
-	replyReceived <-chan bool,
 	updateAddr <-chan string,
+	replyReceived <-chan types.Header,
+	msgChan <-chan []byte,
 ) {
-	addr := initialAddr
 
-	Send(addr, authorID, msgType, msg)
+	var addr string
+	var msgBuffer [][]byte
 
-	msgTimedOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
+	msgTimeOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
+	msgTimeOut.Stop()
 
 	for {
 		select {
 		case newAddr := <-updateAddr:
 			addr = newAddr
 
-		case <-replyReceived:
-			msgTimedOut.Stop()
-			return
+			if addr == "" {
+				msgBuffer = nil
+			}
 
-		case <-msgTimedOut.C:
-			Send(addr, authorID, msgType, msg)
+		case replyHeader := <-replyReceived:
+			if len(msgBuffer) == 0 {
+				continue
+			}
+
+			msgHeader, _ := GetMsgHeader(msgBuffer[0])
+
+			validReply := replyHeader == *msgHeader
+
+			if !validReply {
+				continue
+			}
+
+			msgBuffer = msgBuffer[1:]
+
+			if len(msgBuffer) == 0 {
+				msgTimeOut.Stop()
+				continue
+			}
+
+			Send(addr, msgBuffer[0])
+			msgTimeOut.Reset(MSG_TIMEOUT * time.Millisecond)
+
+		case msg := <-msgChan:
+			msgBuffer = append(msgBuffer, msg)
+
+			if len(msgBuffer) == 1 {
+				Send(addr, msgBuffer[0])
+				msgTimeOut = time.NewTicker(MSG_TIMEOUT * time.Millisecond)
+			}
+
+		case <-msgTimeOut.C:
+			if len(msgBuffer) > 0 {
+				Send(addr, msgBuffer[0])
+			}
 
 		default:
 			/*

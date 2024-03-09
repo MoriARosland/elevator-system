@@ -7,34 +7,12 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"encoding/json"
-	"flag"
 	"fmt"
-	"os"
 )
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 4
+const NUM_FLOORS = 6
 const DOOR_OPEN_DURATION = 3000
-
-/*
- * Parse command line arguments
- */
-func parseCommandlineFlags() (int, int, int, int) {
-	nodeID := flag.Int("id", -1, "Node id")
-	numNodes := flag.Int("num", -1, "Number of nodes")
-	baseBroadcastPort := flag.Int("bport", -1, "Base Broadcasting port")
-	elevServerPort := flag.Int("sport", -1, "Elevator server port")
-
-	flag.Parse()
-
-	if *nodeID < 0 || *numNodes < 0 || *baseBroadcastPort < 0 || *elevServerPort < 0 {
-		fmt.Println("Missing flags, use flag -h to see usage")
-		os.Exit(1)
-	}
-
-	return *nodeID, *numNodes, *baseBroadcastPort, *elevServerPort
-}
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
@@ -84,7 +62,8 @@ func main() {
 	go network.Broadcast(elevConfig.BroadcastPort)
 
 	/*
-	 * Monitor next nodes and update NextNode in elevConfig
+	 * Monitor next nodes and update NextNode in elevState
+	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
 	syncWithNetwork := make(chan types.NextNode)
@@ -116,10 +95,17 @@ func main() {
 	)
 
 	/*
-	 * Channels used by secure send
+	 * Setup secure message sending
 	 */
 	updateNextNodeAddr := make(chan string)
-	replyReceived := make(chan bool)
+	replyReceived := make(chan types.Header)
+	sendSecureMsg := make(chan []byte)
+
+	go network.SecureSend(
+		updateNextNodeAddr,
+		replyReceived,
+		sendSecureMsg,
+	)
 
 	/*
 	 * Main for/select
@@ -138,29 +124,46 @@ func main() {
 			}
 
 			elevState.NextNode = newNextNode
-			fmt.Println("Next node changed. Next node is now: ", elevState.NextNode.ID)
+			updateNextNodeAddr <- elevState.NextNode.Addr
 
-			if elevState.WaitingForReply {
-				updateNextNodeAddr <- elevState.NextNode.Addr
-			}
+			fmt.Print("\033[J\033[2;0H\r  ")
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ",
+				elevConfig.NodeID,
+				elevState.NextNode.ID,
+				elevState.NextNode.Addr,
+			)
 
 		/*
 		 * Handle button presses
 		 */
-		case buttonEvent := <-drvButtons:
+		case newOrder := <-drvButtons:
+			if elevState.ProcessingOrder {
+				continue
+			}
+
+			elevState.ProcessingOrder = true
 
 			/*
-			 * TODO: assign order properly
+			 * Cab orders are directly selfassigned
 			 */
+			if newOrder.Button == elevio.BT_Cab {
+				sendSecureMsg <- network.FormatAssignMsg(
+					newOrder,
+					elevConfig.NodeID,
+					elevConfig.NodeID,
+				)
 
-			elevState.Orders[elevConfig.NodeID][buttonEvent.Floor][buttonEvent.Button] = true
+				continue
+			}
 
-			output := fsm.OnOrderAssigned(buttonEvent, elevState, elevConfig)
-
-			elevState = elev.UpdateState(
-				elevState,
-				output,
-				elevConfig,
+			/*
+			 * Hall orders are assigned after a bidding round
+			 */
+			sendSecureMsg <- network.FormatBidMsg(
+				nil,
+				newOrder,
+				elevConfig.NumNodes,
+				elevConfig.NodeID,
 			)
 
 		/*
@@ -170,12 +173,13 @@ func main() {
 			elevState.Floor = newCurrentFloor
 			elevio.SetFloorIndicator(newCurrentFloor)
 
-			output := fsm.OnFloorArrival(elevState, elevConfig)
+			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
 
 			elevState = elev.UpdateState(
 				elevState,
-				output,
 				elevConfig,
+				fsmOutput,
+				sendSecureMsg,
 			)
 
 		/*
@@ -189,67 +193,104 @@ func main() {
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
 
-			/*
-			 * Test: send an assign message
-			 */
-
-			msg := types.Msg[types.Assign]{
-				Content: types.Assign{
-					Order:    types.Order{Floor: 1, Button: 2},
-					Assignee: 17,
-				},
-			}
-
-			encoded, err := msg.ToJson()
-
-			if err != nil {
-				continue
-			}
-
-			network.Send(elevState.NextNode.Addr, elevConfig.NodeID, types.ASSIGN, encoded)
-
 		/*
 		 * Handle incomming UDP messages
 		 */
-		case msg := <-incomingMessageChannel:
+		case encodedMsg := <-incomingMessageChannel:
+			header, err := network.GetMsgHeader(encodedMsg)
 
-			fmt.Println("Request incomming")
-			sizeofHeader := 23
-
-			encodedMsgHeader, encodedMsgContent := msg[:sizeofHeader], msg[sizeofHeader:]
-
-			var msgHeader types.MsgHeader
-			err = json.Unmarshal(encodedMsgHeader, &msgHeader)
-
-			/*
-			 * Discard message if we cannot parse the header
-			 */
 			if err != nil {
 				continue
 			}
 
-			if msgHeader.AuthorID == elevConfig.NodeID {
-				elevState.WaitingForReply = false
-				replyReceived <- true
+			isReply := header.AuthorID == elevConfig.NodeID
+
+			if isReply {
+				replyReceived <- *header
 			}
 
-			switch msgHeader.Type {
+			switch header.Type {
 			case types.BID:
 				/*
 				 * Handle bid
 				 */
-
-			case types.ASSIGN:
-				/*
-				 * Handle assign
-				 */
-				decodedMsgContent, err := network.JsonToMsg[types.Assign](encodedMsgContent)
+				bidMsg, err := network.GetMsgContent[types.Bid](encodedMsg)
 
 				if err != nil {
 					continue
 				}
 
-				fmt.Println("Received message: ", decodedMsgContent)
+				bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
+					elevState,
+					elevConfig,
+					bidMsg.Order,
+				)
+
+				if isReply {
+					assignee := MinTimeToServed(bidMsg.TimeToServed)
+
+					sendSecureMsg <- network.FormatAssignMsg(
+						bidMsg.Order,
+						assignee,
+						elevConfig.NodeID,
+					)
+
+					continue
+				}
+
+				encodedMsg = network.FormatBidMsg(
+					bidMsg.TimeToServed,
+					bidMsg.Order,
+					elevConfig.NumNodes,
+					header.AuthorID,
+				)
+
+			case types.ASSIGN:
+				/*
+				 * Handle assign
+				 */
+				assignMsg, err := network.GetMsgContent[types.Assign](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				elevState = elev.OnOrderChanged(
+					elevState,
+					elevConfig,
+					assignMsg.Assignee,
+					assignMsg.Order,
+					true,
+				)
+
+				/*
+				 * Make sure that the message is forwarded before updating
+				 * state in case the order is to be cleared immediately
+				 */
+				if !isReply {
+					network.Send(elevState.NextNode.Addr, encodedMsg)
+				} else {
+					elevState.ProcessingOrder = false
+				}
+
+				if assignMsg.Assignee != elevConfig.NodeID {
+					continue
+				}
+
+				fsmOutput := fsm.OnOrderAssigned(
+					assignMsg.Order,
+					elevState,
+					elevConfig,
+				)
+
+				elevState = elev.UpdateState(
+					elevState,
+					elevConfig,
+					fsmOutput,
+					sendSecureMsg,
+				)
+
+				continue
 
 			case types.REASSIGN:
 				/*
@@ -260,96 +301,35 @@ func main() {
 				/*
 				 * Handle served
 				 */
-
-			case types.SYNC:
-				/*
-				 * Handle sync
-				 */
-
-				decodedMsgContent, err := network.JsonToMsg[types.Sync](encodedMsgContent)
+				servedMsg, err := network.GetMsgContent[types.Served](encodedMsg)
 
 				if err != nil {
 					continue
 				}
 
-				target := decodedMsgContent.Content.Target
-				newOrders := decodedMsgContent.Content.Orders
-
-				if target.ID == elevConfig.NodeID {
-					fmt.Println("Received sync meessage. Updating orders...")
-
-					for elevator := range newOrders {
-						for floor := range newOrders[elevator] {
-							for btn := 0; btn < elevConfig.NumButtons; btn++ {
-								if btn == elevio.BT_Cab {
-									// Merge cab orders
-									elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn] || elevState.Orders[elevator][floor][btn]
-								} else {
-									// Overwrite hall orders
-									elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn]
-								}
-
-							}
-						}
-					}
-
-					fmt.Println("Orders updated.")
-				}
-
-				if msgHeader.AuthorID == elevConfig.NodeID {
-					fmt.Println("Sync complete.")
-					continue
-				}
-
-				// Acknowledge sync
-				network.Send(
-					elevState.NextNode.Addr,
-					msgHeader.AuthorID,
-					types.SYNC,
-					encodedMsgContent,
+				elevState = elev.OnOrderChanged(
+					elevState,
+					elevConfig,
+					header.AuthorID,
+					servedMsg.Order,
+					false,
 				)
 
-				fmt.Println("Passing sync to", msgHeader.AuthorID, ".")
-				fmt.Println("Author: ", msgHeader.AuthorID, " | Target node: ", target.ID)
+			case types.SYNC:
+				/*
+				 * Handle sync
+				 */
+			}
+
+			/*
+			 * Forward message
+			 */
+			if !isReply {
+				network.Send(elevState.NextNode.Addr, encodedMsg)
 			}
 
 		/*
-		 * Syncronize local request list with the network's latest list.
-		 */
-		case targetNode := <-syncWithNetwork:
-
-			if elevState.WaitingForReply {
-				continue
-			}
-
-			fmt.Println("Syncing orders with Node ", targetNode.ID, "...")
-
-			msg := types.Msg[types.Sync]{
-				Content: types.Sync{
-					Orders: elevState.Orders,
-					Target: targetNode,
-				},
-			}
-
-			encodedMsg, err := msg.ToJson()
-
-			if err != nil {
-				// TODO: handle error
-				continue
-			}
-
-			elevState.WaitingForReply = true
-			go network.SecureSend(
-				elevState.NextNode.Addr,
-				elevConfig.NodeID,
-				types.SYNC,
-				encodedMsg,
-				replyReceived,
-				updateNextNodeAddr,
-			)
-
-		/*
-		 * Handle door time outs
+		 * Handle door timeouts
 		 */
 		default:
 			if timer.TimedOut() {
@@ -359,12 +339,13 @@ func main() {
 				}
 				timer.Stop()
 
-				output := fsm.OnDoorTimeout(elevState, elevConfig)
+				fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
 
 				elevState = elev.UpdateState(
 					elevState,
-					output,
 					elevConfig,
+					fsmOutput,
+					sendSecureMsg,
 				)
 			}
 		}

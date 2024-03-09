@@ -2,6 +2,7 @@ package elev
 
 import (
 	"Driver-go/elevio"
+	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
 	"errors"
@@ -52,10 +53,14 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 	return &elevState
 }
 
+/*
+ * Takes in output from fsm, performs side effects and return new elev state
+ */
 func UpdateState(
 	oldState *types.ElevState,
-	stateChanges types.FsmOutput,
 	elevConfig *types.ElevConfig,
+	stateChanges types.FsmOutput,
+	sendSecureMsg chan<- []byte,
 ) *types.ElevState {
 
 	if stateChanges.SetMotor {
@@ -68,24 +73,27 @@ func UpdateState(
 	}
 
 	newState := types.ElevState{
-		Floor:           oldState.Floor,
-		Dirn:            stateChanges.ElevDirn,
-		DoorObstr:       oldState.DoorObstr,
-		Orders:          oldState.Orders,
-		NextNode:        oldState.NextNode,
-		WaitingForReply: oldState.WaitingForReply,
+		Floor:     oldState.Floor,
+		Dirn:      stateChanges.ElevDirn,
+		DoorObstr: oldState.DoorObstr,
+		Orders:    oldState.Orders,
+		NextNode:  oldState.NextNode,
 	}
 
+	/*
+	 * Clear served orders
+	 */
 	for order, clearOrder := range stateChanges.ClearOrders {
 		if clearOrder {
-			// TODO: Handle order clearing correctly (sendSecure through network)
-			newState.Orders[elevConfig.NodeID][newState.Floor][order] = false
+			sendSecureMsg <- network.FormatServedMsg(
+				types.Order{
+					Button: elevio.ButtonType(order),
+					Floor:  newState.Floor,
+				},
+				elevConfig.NodeID,
+			)
 		}
 	}
-
-	cabcalls := newState.Orders[elevConfig.NodeID]
-	SetCabLights(cabcalls, elevConfig)
-	SetHallLights(newState.Orders, elevConfig)
 
 	return &newState
 }
@@ -148,8 +156,24 @@ func SetHallLights(orders [][][]bool, elevConfig *types.ElevConfig) {
 	}
 }
 
-func SetCabLights(cabcalls [][]bool, elevConfig *types.ElevConfig) {
-	for floor := range cabcalls {
-		elevio.SetButtonLamp(elevio.BT_Cab, floor, cabcalls[floor][elevio.BT_Cab])
+func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
+	for floor := range orders {
+		elevio.SetButtonLamp(elevio.BT_Cab, floor, orders[floor][elevio.BT_Cab])
 	}
+}
+
+func OnOrderChanged(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	assignee int,
+	order types.Order,
+	newStatus bool,
+) *types.ElevState {
+
+	elevState.Orders[assignee][order.Floor][order.Button] = newStatus
+
+	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	SetHallLights(elevState.Orders, elevConfig)
+
+	return elevState
 }
