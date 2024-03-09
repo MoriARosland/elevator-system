@@ -177,3 +177,28 @@ func OnOrderChanged(
 
 	return elevState
 }
+
+func OnSync(elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	newOrders [][][]bool,
+) *types.ElevState {
+
+	for elevator := range newOrders {
+		for floor := range newOrders[elevator] {
+			for btn := range newOrders[elevator][floor] {
+				if btn == elevio.BT_Cab && elevator == elevConfig.NodeID {
+					// Merge cab orders
+					elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn] || elevState.Orders[elevator][floor][btn]
+				} else {
+					// Overwrite hall orders
+					elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn]
+				}
+			}
+		}
+	}
+
+	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	SetHallLights(elevState.Orders, elevConfig)
+
+	return elevState
+}
