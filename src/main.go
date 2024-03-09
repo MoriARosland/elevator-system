@@ -7,7 +7,6 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"fmt"
 	"time"
 )
 
@@ -17,11 +16,6 @@ const DOOR_OPEN_DURATION = 3000
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
-
-	/*
-	 * Clear terminal window
-	 */
-	fmt.Print("\033[2J")
 
 	/*
 	 * Initiate elevator config
