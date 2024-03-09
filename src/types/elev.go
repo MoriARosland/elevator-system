@@ -24,4 +24,5 @@ type ElevState struct {
 	DoorObstr       bool
 	Orders          [][][]bool
 	NextNode        NextNode
+	ProcessingOrder bool
 }

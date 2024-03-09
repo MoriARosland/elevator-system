@@ -39,9 +39,13 @@ type Sync struct {
 	Orders [][][]bool
 }
 
+/*
+ * Header must have a fixed size
+ * -> AuthorID must be btween 0 and 9
+ */
 type Header struct {
 	Type     MsgTypes
-	AuthorID int // must contain a single digit number [0, 9] in order to properly decode messages
+	AuthorID int
 }
 
 type Content interface {
@@ -53,6 +57,10 @@ type Msg[T Content] struct {
 	Content T
 }
 
+/*
+ * Parses message header and content to json separately in
+ * order to retrieve content type from header upon msg receival
+ */
 func (msg Msg[T]) ToJson() []byte {
 	encodedContent, err := json.Marshal(msg.Content)
 

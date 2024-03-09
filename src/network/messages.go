@@ -34,3 +34,56 @@ func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
 
 	return &content, nil
 }
+
+func FormatAssignMsg(order types.Order, assignee int, author int) []byte {
+	msg := types.Msg[types.Assign]{
+		Header: types.Header{
+			Type:     types.ASSIGN,
+			AuthorID: author,
+		},
+		Content: types.Assign{
+			Order:    order,
+			Assignee: assignee,
+		},
+	}
+
+	return msg.ToJson()
+}
+
+func FormatServedMsg(order types.Order, author int) []byte {
+	msg := types.Msg[types.Served]{
+		Header: types.Header{
+			Type:     types.SERVED,
+			AuthorID: author,
+		},
+		Content: types.Served{
+			Order: order,
+		},
+	}
+
+	return msg.ToJson()
+}
+
+func FormatBidMsg(timeToServed []int, order types.Order, NumNodes int, author int) []byte {
+	if len(timeToServed) == 0 {
+
+		timeToServed = make([]int, NumNodes)
+
+		for NodeID := range timeToServed {
+			timeToServed[NodeID] = -1
+		}
+	}
+
+	msg := types.Msg[types.Bid]{
+		Header: types.Header{
+			Type:     types.BID,
+			AuthorID: author,
+		},
+		Content: types.Bid{
+			Order:        order,
+			TimeToServed: timeToServed,
+		},
+	}
+
+	return msg.ToJson()
+}

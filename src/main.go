@@ -7,33 +7,12 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"flag"
 	"fmt"
-	"os"
 )
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 4
+const NUM_FLOORS = 6
 const DOOR_OPEN_DURATION = 3000
-
-/*
- * Parse command line arguments
- */
-func parseCommandlineFlags() (int, int, int, int) {
-	nodeID := flag.Int("id", -1, "Node id")
-	numNodes := flag.Int("num", -1, "Number of nodes")
-	baseBroadcastPort := flag.Int("bport", -1, "Base Broadcasting port")
-	elevServerPort := flag.Int("sport", -1, "Elevator server port")
-
-	flag.Parse()
-
-	if *nodeID < 0 || *numNodes < 0 || *baseBroadcastPort < 0 || *elevServerPort < 0 {
-		fmt.Println("Missing flags, use flag -h to see usage")
-		os.Exit(1)
-	}
-
-	return *nodeID, *numNodes, *baseBroadcastPort, *elevServerPort
-}
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
@@ -83,7 +62,8 @@ func main() {
 	go network.Broadcast(elevConfig.BroadcastPort)
 
 	/*
-	 * Monitor next nodes and update NextNode in elevConfig
+	 * Monitor next nodes and update NextNode in elevState
+	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
 
@@ -144,23 +124,44 @@ func main() {
 			elevState.NextNode = newNextNode
 			updateNextNodeAddr <- elevState.NextNode.Addr
 
+			fmt.Print("\033[J\033[2;0H\r  ")
+			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ",
+				elevConfig.NodeID,
+				elevState.NextNode.ID,
+				elevState.NextNode.Addr,
+			)
+
 		/*
 		 * Handle button presses
 		 */
-		case buttonEvent := <-drvButtons:
+		case newOrder := <-drvButtons:
+			if elevState.ProcessingOrder {
+				continue
+			}
+
+			elevState.ProcessingOrder = true
 
 			/*
-			 * TODO: assign order properly
+			 * Cab orders are directly selfassigned
 			 */
+			if newOrder.Button == elevio.BT_Cab {
+				sendSecureMsg <- network.FormatAssignMsg(
+					newOrder,
+					elevConfig.NodeID,
+					elevConfig.NodeID,
+				)
 
-			elevState.Orders[elevConfig.NodeID][buttonEvent.Floor][buttonEvent.Button] = true
+				continue
+			}
 
-			output := fsm.OnOrderAssigned(buttonEvent, elevState, elevConfig)
-
-			elevState = elev.UpdateState(
-				elevState,
-				output,
-				elevConfig,
+			/*
+			 * Hall orders are assigned after a bidding round
+			 */
+			sendSecureMsg <- network.FormatBidMsg(
+				nil,
+				newOrder,
+				elevConfig.NumNodes,
+				elevConfig.NodeID,
 			)
 
 		/*
@@ -170,12 +171,13 @@ func main() {
 			elevState.Floor = newCurrentFloor
 			elevio.SetFloorIndicator(newCurrentFloor)
 
-			output := fsm.OnFloorArrival(elevState, elevConfig)
+			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
 
 			elevState = elev.UpdateState(
 				elevState,
-				output,
 				elevConfig,
+				fsmOutput,
+				sendSecureMsg,
 			)
 
 		/*
@@ -188,31 +190,6 @@ func main() {
 
 			timer.Start(elevConfig.DoorOpenDuration)
 			elevState.DoorObstr = isObstructed
-
-			/*
-			 * Test: send an assign message
-			 */
-
-			msg := types.Msg[types.Assign]{
-				Header: types.Header{
-					AuthorID: elevConfig.NodeID,
-					Type:     types.ASSIGN,
-				},
-				Content: types.Assign{
-					Order: types.Order{
-						Floor:  1,
-						Button: 2,
-					},
-					Assignee: 17,
-				},
-			}
-
-			encodedMsg := msg.ToJson()
-			sendSecureMsg <- encodedMsg
-
-			msg.Content.Assignee = 69
-			encodedMsg = msg.ToJson()
-			sendSecureMsg <- encodedMsg
 
 		/*
 		 * Handle incomming UDP messages
@@ -235,22 +212,83 @@ func main() {
 				/*
 				 * Handle bid
 				 */
-
-			case types.ASSIGN:
-				/*
-				 * Handle assign
-				 */
-				decodedMsgContent, err := network.GetMsgContent[types.Assign](encodedMsg)
+				bidMsg, err := network.GetMsgContent[types.Bid](encodedMsg)
 
 				if err != nil {
 					continue
 				}
 
-				fmt.Println("Received message: ", decodedMsgContent.Assignee)
+				bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
+					elevState,
+					elevConfig,
+					bidMsg.Order,
+				)
 
+				if isReply {
+					assignee := MinTimeToServed(bidMsg.TimeToServed)
+
+					sendSecureMsg <- network.FormatAssignMsg(
+						bidMsg.Order,
+						assignee,
+						elevConfig.NodeID,
+					)
+
+					continue
+				}
+
+				encodedMsg = network.FormatBidMsg(
+					bidMsg.TimeToServed,
+					bidMsg.Order,
+					elevConfig.NumNodes,
+					header.AuthorID,
+				)
+
+			case types.ASSIGN:
+				/*
+				 * Handle assign
+				 */
+				assignMsg, err := network.GetMsgContent[types.Assign](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				elevState = elev.OnOrderChanged(
+					elevState,
+					elevConfig,
+					assignMsg.Assignee,
+					assignMsg.Order,
+					true,
+				)
+
+				/*
+				 * Make sure that the message is forwarded before updating
+				 * state in case the order is to be cleared immediately
+				 */
 				if !isReply {
 					network.Send(elevState.NextNode.Addr, encodedMsg)
+				} else {
+					elevState.ProcessingOrder = false
 				}
+
+				if assignMsg.Assignee != elevConfig.NodeID {
+					continue
+				}
+
+				fsmOutput := fsm.OnOrderAssigned(
+					assignMsg.Order,
+					elevState,
+					elevConfig,
+				)
+
+				elevState = elev.UpdateState(
+					elevState,
+					elevConfig,
+					fsmOutput,
+					sendSecureMsg,
+				)
+
+				continue
 
 			case types.REASSIGN:
 				/*
@@ -261,6 +299,19 @@ func main() {
 				/*
 				 * Handle served
 				 */
+				servedMsg, err := network.GetMsgContent[types.Served](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				elevState = elev.OnOrderChanged(
+					elevState,
+					elevConfig,
+					header.AuthorID,
+					servedMsg.Order,
+					false,
+				)
 
 			case types.SYNC:
 				/*
@@ -268,8 +319,15 @@ func main() {
 				 */
 			}
 
+			/*
+			 * Forward message
+			 */
+			if !isReply {
+				network.Send(elevState.NextNode.Addr, encodedMsg)
+			}
+
 		/*
-		 * Handle door time outs
+		 * Handle door timeouts
 		 */
 		default:
 			if timer.TimedOut() {
@@ -279,12 +337,13 @@ func main() {
 				}
 				timer.Stop()
 
-				output := fsm.OnDoorTimeout(elevState, elevConfig)
+				fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
 
 				elevState = elev.UpdateState(
 					elevState,
-					output,
 					elevConfig,
+					fsmOutput,
+					sendSecureMsg,
 				)
 			}
 		}

@@ -4,16 +4,24 @@ import (
 	"Driver-go/elevio"
 	"elevator/orders"
 	"elevator/types"
+	"encoding/json"
 )
 
 const TRAVEL_TIME = 2000 // ms
+
+func deepCopy(obj types.ElevState, copy *types.ElevState) {
+	encodedObj, _ := json.Marshal(obj)
+	_ = json.Unmarshal(encodedObj, copy)
+}
 
 func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig, order types.Order) int {
 	if 0 > elevState.Floor {
 		return -1
 	}
 
-	elevSimState := *elevState
+	var elevSimState types.ElevState
+	deepCopy(*elevState, &elevSimState)
+
 	elevSimState.Orders[elevConfig.NodeID][order.Floor][order.Button] = true
 
 	duration := 0
@@ -39,6 +47,9 @@ func TimeToOrderServed(elevState *types.ElevState, elevConfig *types.ElevConfig,
 			shouldClear := orders.ClearAtCurrentFloor(&elevSimState, elevConfig)
 
 			if order.Floor == elevSimState.Floor && shouldClear[order.Button] {
+				if 0 > duration {
+					duration = 0
+				}
 				return duration
 			}
 
