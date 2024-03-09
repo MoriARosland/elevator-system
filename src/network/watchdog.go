@@ -24,10 +24,10 @@ func MonitorNextNode(
 	nextNodeID int,
 	selfDestruct <-chan bool,
 	updateNextNode chan<- types.NextNode,
+	terminationComplete chan bool,
 	syncWithNetwork chan<- types.NextNode,
 ) {
 	var prevNodeID int
-	hasSubroutine := false
 
 	if nodeID == 0 {
 		prevNodeID = numNodes - 1
@@ -35,7 +35,11 @@ func MonitorNextNode(
 		prevNodeID = nodeID - 1
 	}
 
+	hasSubroutine := false
+	isAlive := true
+
 	destroySubroutine := make(chan bool)
+
 	buf := make([]byte, BUF_SIZE)
 
 	nextNodePort := basePort + nextNodeID
@@ -51,6 +55,8 @@ func MonitorNextNode(
 		case <-selfDestruct:
 			if hasSubroutine {
 				destroySubroutine <- true
+			} else {
+				terminationComplete <- true
 			}
 
 			return
@@ -73,57 +79,74 @@ func MonitorNextNode(
 			 * UDP read successful, the next node is alive
 			 */
 			if err == nil {
-				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
-
 				if hasSubroutine {
 					destroySubroutine <- true
+					<-terminationComplete
 					hasSubroutine = false
-					syncWithNetwork <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
 				}
 
-				updateNextNode <- types.NextNode{ID: nextNodeID, Addr: addr.String()}
+				updateNextNode <- types.NextNode{
+					ID:   nextNodeID,
+					Addr: addr.String(),
+				}
+
+				if !isAlive {
+					syncWithNetwork <- types.NextNode{
+						ID:   nextNodeID,
+						Addr: addr.String(),
+					}
+				}
+
+				isAlive = true
 				continue
+			}
+
+			isAlive = false
+
+			nErr, ok := err.(net.Error)
+			if !ok || !nErr.Timeout() {
+				panic(err)
 			}
 
 			/*
 			 * UDP read timed out
 			 */
-			if nErr, ok := err.(net.Error); ok && nErr.Timeout() {
-				if hasSubroutine {
-					break
-				}
-
-				if nextNodeID == prevNodeID {
-					updateNextNode <- types.NextNode{ID: -1, Addr: ""}
-					continue
-				}
-
-				/*
-				 * If we have not come full circle:
-				 * spawn new subroutine to monitor the "next" nextNode
-				 */
-				var nextNextNodeID int
-
-				if nextNodeID+1 >= numNodes {
-					nextNextNodeID = 0
-				} else {
-					nextNextNodeID = nextNodeID + 1
-				}
-
-				go MonitorNextNode(
-					nodeID,
-					numNodes,
-					basePort,
-					nextNextNodeID,
-					destroySubroutine,
-					updateNextNode,
-				)
-				hasSubroutine = true
-
+			if hasSubroutine {
 				continue
 			}
 
-			panic(err)
+			if nextNodeID == prevNodeID {
+				updateNextNode <- types.NextNode{
+					ID:   -1,
+					Addr: "",
+				}
+				continue
+			}
+
+			/*
+			 * If we have not come full circle:
+			 * spawn new subroutine to monitor the "next" nextNode
+			 */
+			var nextNextNodeID int
+
+			if nextNodeID+1 >= numNodes {
+				nextNextNodeID = 0
+			} else {
+				nextNextNodeID = nextNodeID + 1
+			}
+
+			go MonitorNextNode(
+				nodeID,
+				numNodes,
+				basePort,
+				nextNextNodeID,
+				destroySubroutine,
+				updateNextNode,
+				terminationComplete,
+				syncWithNetwork,
+			)
+
+			hasSubroutine = true
 		}
 	}
 }

@@ -44,41 +44,6 @@ func main() {
 	elevState := elev.InitState(elevConfig)
 
 	/*
-	 * Initiate elevator driver
-	 */
-	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevServerPort, elevConfig.NumFloors)
-
-	currentFloor := elevio.GetFloor()
-	if 0 > currentFloor {
-		elevio.SetMotorDirection(elevio.MD_Down)
-		elevState.Dirn = elevio.MD_Down
-
-		fsm.OnInitBetweenFloors()
-	}
-
-	/*
-	 * Start "I'm alive" broadcasting
-	 */
-	go network.Broadcast(elevConfig.BroadcastPort)
-
-	/*
-	 * Monitor next nodes and update NextNode in elevState
-	 * Makes sure we always know which node to send messages to
-	 */
-	updateNextNode := make(chan types.NextNode)
-	syncWithNetwork := make(chan types.NextNode)
-
-	go network.MonitorNextNode(
-		elevConfig.NodeID,
-		elevConfig.NumNodes,
-		baseBroadcastPort,
-		elev.FindNextNodeID(elevConfig),
-		make(chan bool),
-		updateNextNode,
-		syncWithNetwork,
-	)
-
-	/*
 	 * Continuously listen for messages from previous node
 	 */
 	localIP, err := network.LocalIP()
@@ -95,6 +60,24 @@ func main() {
 	)
 
 	/*
+	 * Monitor next nodes and update NextNode in elevState
+	 * Makes sure we always know which node to send messages to
+	 */
+	updateNextNode := make(chan types.NextNode)
+	syncNextNode := make(chan types.NextNode)
+
+	go network.MonitorNextNode(
+		elevConfig.NodeID,
+		elevConfig.NumNodes,
+		baseBroadcastPort,
+		elev.FindNextNodeID(elevConfig),
+		make(chan bool),
+		updateNextNode,
+		make(chan bool),
+		syncNextNode,
+	)
+
+	/*
 	 * Setup secure message sending
 	 */
 	updateNextNodeAddr := make(chan string)
@@ -106,6 +89,36 @@ func main() {
 		replyReceived,
 		sendSecureMsg,
 	)
+
+	/*
+	 * Initiate elevator driver
+	 */
+	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevServerPort, elevConfig.NumFloors)
+
+	elevState.NextNode = <-updateNextNode
+	updateNextNodeAddr <- elevState.NextNode.Addr
+
+	/*
+	 * TODO: Refactor to own function
+	 */
+	currentFloor := elevio.GetFloor()
+	if 0 > currentFloor {
+		elevio.SetMotorDirection(elevio.MD_Down)
+		elevState.Dirn = elevio.MD_Down
+
+		fsm.OnInitBetweenFloors()
+	}
+
+	elevio.SetDoorOpenLamp(false)
+	elev.SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	elev.SetHallLights(elevState.Orders, elevConfig)
+
+	/*
+	 * Start "I'm alive" broadcasting
+	 */
+	go network.Broadcast(elevConfig.BroadcastPort)
+
+	fmt.Println("Setup complete")
 
 	/*
 	 * Main for/select
@@ -126,11 +139,14 @@ func main() {
 			elevState.NextNode = newNextNode
 			updateNextNodeAddr <- elevState.NextNode.Addr
 
-			fmt.Print("\033[J\033[2;0H\r  ")
-			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ",
+		/*
+		 * Sync new next node
+		 */
+		case targetNode := <-syncNextNode:
+			sendSecureMsg <- network.FormatSyncMsg(
+				targetNode,
+				elevState.Orders,
 				elevConfig.NodeID,
-				elevState.NextNode.ID,
-				elevState.NextNode.Addr,
 			)
 
 		/*
@@ -319,6 +335,33 @@ func main() {
 				/*
 				 * Handle sync
 				 */
+				syncMsg, err := network.GetMsgContent[types.Sync](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				if syncMsg.Target.ID != elevConfig.NodeID {
+					break
+				}
+
+				elevState = elev.OnSync(
+					elevState,
+					elevConfig,
+					syncMsg.Orders,
+				)
+
+				if elevState.Dirn == elevio.MD_Stop {
+					fsmOutput := fsm.OnSync(elevState, elevConfig)
+
+					elevState = elev.UpdateState(
+						elevState,
+						elevConfig,
+						fsmOutput,
+						sendSecureMsg,
+					)
+				}
+
 			}
 
 			/*
