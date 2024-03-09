@@ -83,13 +83,15 @@ func main() {
 	/*
 	 * Initiate elevator driver
 	 */
-	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevServerPort, elevConfig.NumFloors)
+	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevState, elevConfig, elevServerPort)
 
 	/*
 	 * Wait until we know the status of the other nodes in the circle
 	 */
 	elevState.NextNode = <-updateNextNode
 	updateNextNodeAddr <- elevState.NextNode.Addr
+
+	printNextNode(elevState, elevConfig)
 
 	/*
 	 * In case we start between two floors
@@ -101,13 +103,6 @@ func main() {
 
 		fsm.OnInitBetweenFloors()
 	}
-
-	/*
-	 * Reset elevator to known state
-	 */
-	elevio.SetDoorOpenLamp(false)
-	elev.SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
-	elev.SetHallLights(elevState.Orders, elevConfig)
 
 	/*
 	 * Setup timers
@@ -125,8 +120,6 @@ func main() {
 	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
 	 */
 	go network.Broadcast(elevConfig.BroadcastPort)
-
-	printNextNode(elevState, elevConfig)
 
 	/*
 	 * Main for/select

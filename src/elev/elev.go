@@ -103,11 +103,12 @@ func UpdateState(
  * Initiate elevator driver and elevator polling
  */
 func InitDriver(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
 	port int,
-	numFloors int,
 ) (chan elevio.ButtonEvent, chan int, chan bool) {
 
-	elevio.Init(fmt.Sprintf("localhost:%d", port), numFloors)
+	elevio.Init(fmt.Sprintf("localhost:%d", port), elevConfig.NumFloors)
 
 	drvButtons := make(chan elevio.ButtonEvent)
 	drvFloors := make(chan int)
@@ -116,6 +117,13 @@ func InitDriver(
 	go elevio.PollButtons(drvButtons)
 	go elevio.PollFloorSensor(drvFloors)
 	go elevio.PollObstructionSwitch(drvObstr)
+
+	/*
+	 * Reset elevator to known state
+	 */
+	elevio.SetDoorOpenLamp(false)
+	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	SetHallLights(elevState.Orders, elevConfig)
 
 	return drvButtons, drvFloors, drvObstr
 }
