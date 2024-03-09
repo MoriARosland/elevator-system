@@ -3,7 +3,6 @@ package elev
 import (
 	"Driver-go/elevio"
 	"elevator/network"
-	"elevator/timer"
 	"elevator/types"
 	"errors"
 	"fmt"
@@ -61,15 +60,17 @@ func UpdateState(
 	elevConfig *types.ElevConfig,
 	stateChanges types.FsmOutput,
 	sendSecureMsg chan<- []byte,
+	doorTimer chan<- types.TimerActions,
 ) *types.ElevState {
 
 	if stateChanges.SetMotor {
 		elevio.SetMotorDirection(stateChanges.MotorDirn)
 	}
+
 	elevio.SetDoorOpenLamp(stateChanges.Door)
 
 	if stateChanges.StartDoorTimer {
-		timer.Start(elevConfig.DoorOpenDuration)
+		doorTimer <- types.START
 	}
 
 	newState := types.ElevState{

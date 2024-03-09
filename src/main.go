@@ -8,6 +8,7 @@ import (
 	"elevator/timer"
 	"elevator/types"
 	"fmt"
+	"time"
 )
 
 const NUM_BUTTONS = 3
@@ -99,7 +100,7 @@ func main() {
 	updateNextNodeAddr <- elevState.NextNode.Addr
 
 	/*
-	 * TODO: Refactor to own function
+	 * Reset elevator to known state
 	 */
 	currentFloor := elevio.GetFloor()
 	if 0 > currentFloor {
@@ -112,6 +113,18 @@ func main() {
 	elevio.SetDoorOpenLamp(false)
 	elev.SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
 	elev.SetHallLights(elevState.Orders, elevConfig)
+
+	/*
+	 * Setup timers
+	 */
+	doorTimeout := make(chan bool)
+	doorTimer := make(chan types.TimerActions)
+
+	go timer.Timer(
+		DOOR_OPEN_DURATION*time.Millisecond,
+		doorTimeout,
+		doorTimer,
+	)
 
 	/*
 	 * Start "I'm alive" broadcasting
@@ -196,6 +209,7 @@ func main() {
 				elevConfig,
 				fsmOutput,
 				sendSecureMsg,
+				doorTimer,
 			)
 
 		/*
@@ -206,7 +220,7 @@ func main() {
 				continue
 			}
 
-			timer.Start(elevConfig.DoorOpenDuration)
+			doorTimer <- types.START
 			elevState.DoorObstr = isObstructed
 
 		/*
@@ -304,6 +318,7 @@ func main() {
 					elevConfig,
 					fsmOutput,
 					sendSecureMsg,
+					doorTimer,
 				)
 
 				continue
@@ -359,6 +374,7 @@ func main() {
 						elevConfig,
 						fsmOutput,
 						sendSecureMsg,
+						doorTimer,
 					)
 				}
 
@@ -374,23 +390,26 @@ func main() {
 		/*
 		 * Handle door timeouts
 		 */
-		default:
-			if timer.TimedOut() {
-				if elevState.DoorObstr {
-					timer.Start(elevConfig.DoorOpenDuration)
-					continue
-				}
-				timer.Stop()
-
-				fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
-
-				elevState = elev.UpdateState(
-					elevState,
-					elevConfig,
-					fsmOutput,
-					sendSecureMsg,
-				)
+		case <-doorTimeout:
+			if elevState.DoorObstr {
+				doorTimer <- types.START
+				continue
 			}
+			doorTimer <- types.STOP
+
+			fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
+
+			elevState = elev.UpdateState(
+				elevState,
+				elevConfig,
+				fsmOutput,
+				sendSecureMsg,
+				doorTimer,
+			)
+
+		default:
+			continue
+
 		}
 	}
 }
