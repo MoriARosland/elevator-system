@@ -87,3 +87,18 @@ func FormatBidMsg(timeToServed []int, order types.Order, NumNodes int, author in
 
 	return msg.ToJson()
 }
+
+func FormatSyncMsg(target types.NextNode, orders [][][]bool, author int) []byte {
+	msg := types.Msg[types.Sync]{
+		Header: types.Header{
+			Type:     types.SYNC,
+			AuthorID: author,
+		},
+		Content: types.Sync{
+			Orders: orders,
+			Target: target,
+		},
+	}
+
+	return msg.ToJson()
+}
