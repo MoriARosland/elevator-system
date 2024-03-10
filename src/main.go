@@ -58,6 +58,7 @@ func main() {
 	 */
 	updateNextNode := make(chan types.NextNode)
 	syncNextNode := make(chan int)
+	reassignOrders := make(chan int)
 
 	go network.MonitorNextNode(
 		elevConfig,
@@ -65,6 +66,7 @@ func main() {
 
 		updateNextNode,
 		syncNextNode,
+		reassignOrders,
 
 		make(chan bool),
 		make(chan bool),
@@ -143,6 +145,16 @@ func main() {
 				elevState.Orders,
 				elevConfig.NodeID,
 			)
+
+		case lostNode := <-reassignOrders:
+
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				lostNode,
+				sendSecureMsg,
+			)
+			fmt.Println("Orders reassigned")
 
 		/*
 		 * Handle button presses
@@ -373,6 +385,7 @@ func main() {
 					sendSecureMsg,
 					doorTimer,
 				)
+				fmt.Println("Orders updated")
 			}
 
 			/*
@@ -411,6 +424,7 @@ func main() {
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
+				elevConfig.NodeID,
 				sendSecureMsg,
 			)
 

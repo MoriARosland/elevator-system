@@ -22,7 +22,8 @@ func MonitorNextNode(
 	nextNodeID int,
 
 	updateNextNode chan<- types.NextNode,
-	syncNextNode chan<- int,
+	nodeRevived chan<- int,
+	nodeDied chan<- int,
 
 	terminationComplete chan bool,
 	selfDestruct <-chan bool,
@@ -30,6 +31,7 @@ func MonitorNextNode(
 
 	hasSubroutine := false
 	isAlive := true
+	previouslyAlive := false
 
 	destroySubroutine := make(chan bool)
 
@@ -90,10 +92,12 @@ func MonitorNextNode(
 				}
 
 				if !isAlive {
-					syncNextNode <- nextNodeID
+					fmt.Println("Starting Sync")
+					nodeRevived <- nextNodeID
 				}
 
 				isAlive = true
+				previouslyAlive = true
 				continue
 			}
 
@@ -113,6 +117,12 @@ func MonitorNextNode(
 
 			if hasSubroutine {
 				continue
+			}
+
+			if previouslyAlive {
+				fmt.Println("Lost Node", nextNodeID)
+				nodeDied <- nextNodeID
+				previouslyAlive = false
 			}
 
 			/*
@@ -135,7 +145,8 @@ func MonitorNextNode(
 				calcNextNodeID(elevConfig, nextNodeID),
 
 				updateNextNode,
-				syncNextNode,
+				nodeRevived,
+				nodeDied,
 
 				terminationComplete,
 				destroySubroutine,
