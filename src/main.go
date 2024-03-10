@@ -7,7 +7,7 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"fmt"
+	"time"
 )
 
 const NUM_BUTTONS = 3
@@ -16,11 +16,6 @@ const DOOR_OPEN_DURATION = 3000
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
-
-	/*
-	 * Clear terminal window
-	 */
-	fmt.Print("\033[2J")
 
 	/*
 	 * Initiate elevator config
@@ -44,53 +39,34 @@ func main() {
 	elevState := elev.InitState(elevConfig)
 
 	/*
-	 * Initiate elevator driver
+	 * Continuously listen for messages from previous node
 	 */
-	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevServerPort, elevConfig.NumFloors)
+	incomingMessageChannel := make(chan []byte)
+	listenFunctionDisconnectedChannel := make(chan bool)
 
-	currentFloor := elevio.GetFloor()
-	if 0 > currentFloor {
-		elevio.SetMotorDirection(elevio.MD_Down)
-		elevState.Dirn = elevio.MD_Down
-
-		fsm.OnInitBetweenFloors()
-	}
-
-	/*
-	 * Start "I'm alive" broadcasting
-	 */
-	networkDisconnectedChannel := make(chan bool)
-	go network.Broadcast(elevConfig.BroadcastPort, networkDisconnectedChannel)
+	go network.ListenForMessages(
+		network.localIP(),
+		elevConfig.BroadcastPort,
+		incomingMessageChannel,
+		listenFunctionDisconnectedChannel,
+	)
 
 	/*
 	 * Monitor next nodes and update NextNode in elevState
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
+	syncNextNode := make(chan int)
+
 	go network.MonitorNextNode(
-		elevConfig.NodeID,
-		elevConfig.NumNodes,
-		baseBroadcastPort,
+		elevConfig,
 		elev.FindNextNodeID(elevConfig),
-		make(chan bool),
+
 		updateNextNode,
-	)
+		syncNextNode,
 
-	/*
-	 * Continuously listen for messages from previous node
-	 */
-	localIP, err := network.LocalIP()
-	if err != nil {
-		panic(err)
-	}
-
-	incomingMessageChannel := make(chan []byte)
-	listenFunctionDisconnectedChannel := make(chan bool)
-	go network.ListenForMessages(
-		localIP,
-		elevConfig.BroadcastPort,
-		incomingMessageChannel,
-		listenFunctionDisconnectedChannel,
+		make(chan bool),
+		make(chan bool),
 	)
 
 	/*
@@ -109,6 +85,46 @@ func main() {
 	)
 
 	/*
+	 * Initiate elevator driver
+	 */
+	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevState, elevConfig, elevServerPort)
+
+	/*
+	 * Wait until we know the status of the other nodes in the circle
+	 */
+	elevState.NextNode = <-updateNextNode
+	updateNextNodeAddr <- elevState.NextNode.Addr
+
+	printNextNode(elevState, elevConfig)
+
+	/*
+	 * In case we start between two floors
+	 */
+	if 0 > elevio.GetFloor() {
+		elevio.SetMotorDirection(elevio.MD_Down)
+		elevState.Dirn = elevio.MD_Down
+		fsm.OnInitBetweenFloors()
+	}
+
+	/*
+	 * Setup timers
+	 */
+	doorTimeout := make(chan bool)
+	doorTimer := make(chan types.TimerActions)
+
+	go timer.Timer(
+		DOOR_OPEN_DURATION*time.Millisecond,
+		doorTimeout,
+		doorTimer,
+	)
+
+	/*
+	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
+	 */
+	networkDisconnectedChannel := make(chan bool)
+	go network.Broadcast(elevConfig.BroadcastPort, networkDisconnectedChannel)
+
+	/*
 	 * Main for/select
 	 */
 	for {
@@ -118,9 +134,6 @@ func main() {
 		 * Handle new next node
 		 */
 		case newNextNode := <-updateNextNode:
-			/*
-			 * TODO: handle reassignment of the dead nodes hall orders
-			 */
 			if elevState.NextNode == newNextNode {
 				continue
 			}
@@ -128,20 +141,17 @@ func main() {
 			elevState.NextNode = newNextNode
 			updateNextNodeAddr <- elevState.NextNode.Addr
 
-			fmt.Print("\033[J\033[2;0H\r  ")
-			fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ",
-				elevConfig.NodeID,
-				elevState.NextNode.ID,
-				elevState.NextNode.Addr,
-			)
+			printNextNode(elevState, elevConfig)
 
 		/*
-		 * Update elevators disconnect state
+		 * Sync new next node
 		 */
-		case networkDisconnected := <-networkDisconnectedChannel:
-			elevState.Disconnected = networkDisconnected
-			listenFunctionDisconnectedChannel <- networkDisconnected
-			sendFunctionDisconnectChannel <- networkDisconnected
+		case targetNode := <-syncNextNode:
+			sendSecureMsg <- network.FormatSyncMsg(
+				targetNode,
+				elevState.Orders,
+				elevConfig.NodeID,
+			)
 
 		/*
 		 * Handle button presses
@@ -160,7 +170,7 @@ func main() {
 						newOrder,
 						true,
 					)
-					
+
 					fsmOutput := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
 
 					elevState = elev.UpdateState(
@@ -168,6 +178,7 @@ func main() {
 						elevConfig,
 						fsmOutput,
 						sendSecureMsg,
+						doorTimer,
 					)
 				}
 				continue
@@ -216,6 +227,7 @@ func main() {
 				elevConfig,
 				fsmOutput,
 				sendSecureMsg,
+				doorTimer,
 			)
 
 		/*
@@ -226,7 +238,7 @@ func main() {
 				continue
 			}
 
-			timer.Start(elevConfig.DoorOpenDuration)
+			doorTimer <- types.START
 			elevState.DoorObstr = isObstructed
 
 		/*
@@ -263,7 +275,7 @@ func main() {
 				)
 
 				if isReply {
-					assignee := MinTimeToServed(bidMsg.TimeToServed)
+					assignee := minTimeToServed(bidMsg.TimeToServed)
 
 					sendSecureMsg <- network.FormatAssignMsg(
 						bidMsg.Order,
@@ -324,6 +336,7 @@ func main() {
 					elevConfig,
 					fsmOutput,
 					sendSecureMsg,
+					doorTimer,
 				)
 
 				continue
@@ -355,6 +368,36 @@ func main() {
 				/*
 				 * Handle sync
 				 */
+				syncMsg, err := network.GetMsgContent[types.Sync](encodedMsg)
+
+				if err != nil {
+					continue
+				}
+
+				if syncMsg.TargetID != elevConfig.NodeID {
+					break
+				}
+
+				elevState = elev.OnSync(
+					elevState,
+					elevConfig,
+					syncMsg.Orders,
+				)
+
+				if elevState.Dirn != elevio.MD_Stop {
+					break
+				}
+
+				fsmOutput := fsm.OnSync(elevState, elevConfig)
+
+				elevState = elev.UpdateState(
+					elevState,
+					elevConfig,
+					fsmOutput,
+					sendSecureMsg,
+					doorTimer,
+				)
+
 			}
 
 			/*
@@ -367,23 +410,28 @@ func main() {
 		/*
 		 * Handle door timeouts
 		 */
-		default:
-			if timer.TimedOut() {
-				if elevState.DoorObstr {
-					timer.Start(elevConfig.DoorOpenDuration)
-					continue
-				}
-				timer.Stop()
-
-				fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
-
-				elevState = elev.UpdateState(
-					elevState,
-					elevConfig,
-					fsmOutput,
-					sendSecureMsg,
-				)
+		case <-doorTimeout:
+			if elevState.DoorObstr {
+				doorTimer <- types.START
+				continue
 			}
+			doorTimer <- types.STOP
+
+			fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
+
+			elevState = elev.UpdateState(
+				elevState,
+				elevConfig,
+				fsmOutput,
+				sendSecureMsg,
+				doorTimer,
+			)
+
+		default:
+			/*
+			 * Do nothing
+			 */
+			continue
 		}
 	}
 }

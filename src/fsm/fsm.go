@@ -19,9 +19,8 @@ func OnOrderAssigned(
 ) types.FsmOutput {
 
 	output := types.FsmOutput{
-		ElevDirn:       elevState.Dirn,
-		Door:           state == types.EB_DoorOpen,
-		StartDoorTimer: false,
+		ElevDirn: elevState.Dirn,
+		Door:     state == types.EB_DoorOpen,
 	}
 
 	switch state {
@@ -58,9 +57,8 @@ func OnFloorArrival(
 ) types.FsmOutput {
 
 	output := types.FsmOutput{
-		ElevDirn:       elevState.Dirn,
-		Door:           state == types.EB_DoorOpen,
-		StartDoorTimer: false,
+		ElevDirn: elevState.Dirn,
+		Door:     state == types.EB_DoorOpen,
 	}
 
 	shouldStop := orders.ShouldStop(elevState, elevConfig)
@@ -86,13 +84,39 @@ func OnDoorTimeout(
 ) types.FsmOutput {
 
 	output := types.FsmOutput{
-		ElevDirn:       elevState.Dirn,
-		Door:           state == types.EB_DoorOpen,
-		StartDoorTimer: false,
+		ElevDirn: elevState.Dirn,
+		Door:     state == types.EB_DoorOpen,
 	}
 
 	if state != types.EB_DoorOpen {
 		return output
+	}
+
+	pair := orders.ChooseDirection(elevState, elevConfig)
+
+	output.ElevDirn = pair.Dirn
+	state = pair.Behaviour
+
+	if state == types.EB_DoorOpen {
+		output.StartDoorTimer = true
+		output.ClearOrders = orders.ClearAtCurrentFloor(elevState, elevConfig)
+	} else {
+		output.Door = false
+		output.MotorDirn = pair.Dirn
+		output.SetMotor = true
+	}
+
+	return output
+}
+
+func OnSync(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+) types.FsmOutput {
+
+	output := types.FsmOutput{
+		ElevDirn: elevState.Dirn,
+		Door:     state == types.EB_DoorOpen,
 	}
 
 	pair := orders.ChooseDirection(elevState, elevConfig)
