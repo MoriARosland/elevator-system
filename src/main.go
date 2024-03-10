@@ -7,6 +7,7 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"fmt"
 	"time"
 )
 
@@ -147,12 +148,6 @@ func main() {
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
-			if elevState.ProcessingOrder {
-				continue
-			}
-
-			elevState.ProcessingOrder = true
-
 			/*
 			 * Cab orders are directly selfassigned
 			 */
@@ -305,8 +300,6 @@ func main() {
 				 */
 				if !isReply {
 					network.Send(elevState.NextNode.Addr, encodedMsg)
-				} else {
-					elevState.ProcessingOrder = false
 				}
 
 				if assignMsg.NewAssignee != elevConfig.NodeID {

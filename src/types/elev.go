@@ -19,10 +19,9 @@ type ElevConfig struct {
 }
 
 type ElevState struct {
-	Floor           int
-	Dirn            elevio.MotorDirection
-	DoorObstr       bool
-	Orders          [][][]bool
-	NextNode        NextNode
-	ProcessingOrder bool
+	Floor     int
+	Dirn      elevio.MotorDirection
+	DoorObstr bool
+	Orders    [][][]bool
+	NextNode  NextNode
 }
