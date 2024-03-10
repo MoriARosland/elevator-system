@@ -7,7 +7,6 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"fmt"
 	"time"
 )
 
