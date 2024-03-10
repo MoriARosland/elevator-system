@@ -7,12 +7,15 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"fmt"
 	"time"
 )
 
 const NUM_BUTTONS = 3
 const NUM_FLOORS = 6
+
 const DOOR_OPEN_DURATION = 3000
+const DOOR_OBSTR_TIMEOUT = 6000
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
@@ -105,14 +108,8 @@ func main() {
 	/*
 	 * Setup timers
 	 */
-	doorTimeout := make(chan bool)
-	doorTimer := make(chan types.TimerActions)
-
-	go timer.Timer(
-		DOOR_OPEN_DURATION*time.Millisecond,
-		doorTimeout,
-		doorTimer,
-	)
+	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
+	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
 
 	/*
 	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
@@ -151,12 +148,6 @@ func main() {
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
-			if elevState.ProcessingOrder {
-				continue
-			}
-
-			elevState.ProcessingOrder = true
-
 			/*
 			 * Cab orders are directly selfassigned
 			 */
@@ -164,6 +155,7 @@ func main() {
 				sendSecureMsg <- network.FormatAssignMsg(
 					newOrder,
 					elevConfig.NodeID,
+					int(types.UNASSIGNED),
 					elevConfig.NodeID,
 				)
 
@@ -176,6 +168,7 @@ func main() {
 			sendSecureMsg <- network.FormatBidMsg(
 				nil,
 				newOrder,
+				int(types.UNASSIGNED),
 				elevConfig.NumNodes,
 				elevConfig.NodeID,
 			)
@@ -203,6 +196,12 @@ func main() {
 		case isObstructed := <-drvObstr:
 			if elevState.DoorObstr == isObstructed {
 				continue
+			}
+
+			if isObstructed {
+				obstrTimer <- types.START
+			} else {
+				obstrTimer <- types.STOP
 			}
 
 			doorTimer <- types.START
@@ -235,11 +234,13 @@ func main() {
 					continue
 				}
 
-				bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
-					elevState,
-					elevConfig,
-					bidMsg.Order,
-				)
+				if !elevState.DoorObstr {
+					bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
+						elevState,
+						elevConfig,
+						bidMsg.Order,
+					)
+				}
 
 				if isReply {
 					assignee := minTimeToServed(bidMsg.TimeToServed)
@@ -247,6 +248,7 @@ func main() {
 					sendSecureMsg <- network.FormatAssignMsg(
 						bidMsg.Order,
 						assignee,
+						bidMsg.OldAssignee,
 						elevConfig.NodeID,
 					)
 
@@ -256,6 +258,7 @@ func main() {
 				encodedMsg = network.FormatBidMsg(
 					bidMsg.TimeToServed,
 					bidMsg.Order,
+					bidMsg.OldAssignee,
 					elevConfig.NumNodes,
 					header.AuthorID,
 				)
@@ -273,10 +276,23 @@ func main() {
 				elevState = elev.OnOrderChanged(
 					elevState,
 					elevConfig,
-					assignMsg.Assignee,
+					assignMsg.NewAssignee,
 					assignMsg.Order,
 					true,
 				)
+
+				/*
+				 * In case of an order reassign
+				 */
+				if assignMsg.OldAssignee != int(types.UNASSIGNED) {
+					elevState = elev.OnOrderChanged(
+						elevState,
+						elevConfig,
+						assignMsg.OldAssignee,
+						assignMsg.Order,
+						false,
+					)
+				}
 
 				/*
 				 * Make sure that the message is forwarded before updating
@@ -284,11 +300,9 @@ func main() {
 				 */
 				if !isReply {
 					network.Send(elevState.NextNode.Addr, encodedMsg)
-				} else {
-					elevState.ProcessingOrder = false
 				}
 
-				if assignMsg.Assignee != elevConfig.NodeID {
+				if assignMsg.NewAssignee != elevConfig.NodeID {
 					continue
 				}
 
@@ -307,11 +321,6 @@ func main() {
 				)
 
 				continue
-
-			case types.REASSIGN:
-				/*
-				 * Handle reassign
-				 */
 
 			case types.SERVED:
 				/*
@@ -364,7 +373,6 @@ func main() {
 					sendSecureMsg,
 					doorTimer,
 				)
-
 			}
 
 			/*
@@ -392,6 +400,18 @@ func main() {
 				fsmOutput,
 				sendSecureMsg,
 				doorTimer,
+			)
+
+		/*
+		 * Reassign orders if door obstruction times out
+		 */
+		case <-obstrTimeout:
+			obstrTimer <- types.STOP
+
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				sendSecureMsg,
 			)
 
 		default:
