@@ -23,18 +23,18 @@ func Send(addr string, msg []byte) {
 	receiverPort := strings.Split(addr, ":")[1]
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%s", receiverPort))
 	if err != nil {
-		panic(err)
+		return
 	}
 	defer packetConnection.Close()
 
 	resolvedAddr, err := net.ResolveUDPAddr("udp4", addr)
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	_, err = packetConnection.WriteTo(msg, resolvedAddr)
 	if err != nil {
-		panic(err)
+		return
 	}
 }
 
@@ -63,12 +63,15 @@ func SecureSend(
 
 			if addr == "" {
 				msgBuffer = nil
+				msgTimeOut.Stop()
 			}
 
 		case disconnected = <-disconnectedChan:
+			fmt.Println("case: send diconnected:", disconnected)
 
 			if disconnected {
 				msgBuffer = nil
+				msgTimeOut.Stop()
 			}
 
 		case replyHeader := <-replyReceived:

@@ -28,8 +28,8 @@ func Broadcast(port int, networkDisconnectChannel chan bool) {
 		panic(err)
 	}
 
-	networkDisconnect := false
-	oldNetworkDisconnect := false
+	disconnected := false
+	oldDisconnected := false
 
 	for {
 		time.Sleep(BROADCAST_INTERVAL * time.Millisecond)
@@ -37,14 +37,16 @@ func Broadcast(port int, networkDisconnectChannel chan bool) {
 		_, err := packetConnection.WriteTo([]byte(""), addr)
 
 		if err != nil {
-			networkDisconnect = true
+			disconnected = true
 		} else {
-			networkDisconnect = false // set to true for test purposes
+			disconnected = false
 		}
 
-		if networkDisconnect != oldNetworkDisconnect {
-			networkDisconnectChannel <- networkDisconnect
-			oldNetworkDisconnect = networkDisconnect
+		if disconnected != oldDisconnected {
+			fmt.Println("broadcast diconnected:", disconnected)
+
+			networkDisconnectChannel <- disconnected
+			oldDisconnected = disconnected
 		}
 	}
 }

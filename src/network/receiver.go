@@ -36,6 +36,7 @@ func ListenForMessages(
 			if disconnected {
 				continue
 			}
+
 			n, _, _ := conn.ReadFrom(buffer)
 			messageChannel <- buffer[:n]
 		}

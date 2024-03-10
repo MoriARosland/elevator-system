@@ -41,7 +41,7 @@ func MonitorNextNode(
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", nextNodePort))
 
 	if err != nil {
-		panic(err)
+		return
 	}
 	defer packetConnection.Close()
 
@@ -65,7 +65,7 @@ func MonitorNextNode(
 			err := packetConnection.SetReadDeadline(deadline)
 
 			if err != nil {
-				panic(err)
+				continue
 			}
 
 			_, addr, err := packetConnection.ReadFrom(msgBuffer)
@@ -104,7 +104,7 @@ func MonitorNextNode(
 			 */
 			nErr, ok := err.(net.Error)
 			if !ok || !nErr.Timeout() {
-				panic(err)
+				continue
 			}
 
 			/*

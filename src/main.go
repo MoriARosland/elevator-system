@@ -7,11 +7,12 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"fmt"
 	"time"
 )
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 6
+const NUM_FLOORS = 4
 const DOOR_OPEN_DURATION = 3000
 
 func main() {
@@ -45,7 +46,7 @@ func main() {
 	listenFunctionDisconnectedChannel := make(chan bool)
 
 	go network.ListenForMessages(
-		network.localIP(),
+		network.LocalIP(),
 		elevConfig.BroadcastPort,
 		incomingMessageChannel,
 		listenFunctionDisconnectedChannel,
@@ -57,6 +58,8 @@ func main() {
 	 */
 	updateNextNode := make(chan types.NextNode)
 	syncNextNode := make(chan int)
+	terminationComplete := make(chan bool)
+	destoryWatchdog := make(chan bool)
 
 	go network.MonitorNextNode(
 		elevConfig,
@@ -65,8 +68,8 @@ func main() {
 		updateNextNode,
 		syncNextNode,
 
-		make(chan bool),
-		make(chan bool),
+		terminationComplete,
+		destoryWatchdog,
 	)
 
 	/*
@@ -154,15 +157,56 @@ func main() {
 			)
 
 		/*
+		 * Update elevators disconnect state
+		 */
+		case networkDisconnected := <-networkDisconnectedChannel:
+
+			if networkDisconnected {
+				destoryWatchdog <- true
+				<-terminationComplete
+				fmt.Println("killed the dog")
+			} else {
+				go network.MonitorNextNode(
+					elevConfig,
+					elev.FindNextNodeID(elevConfig),
+
+					updateNextNode,
+					syncNextNode,
+
+					terminationComplete,
+					destoryWatchdog,
+				)
+
+				/*
+				 * Wait until we know the status of the other nodes in the circle
+				 */
+				elevState.NextNode = <-updateNextNode
+				updateNextNodeAddr <- elevState.NextNode.Addr
+
+				// printNextNode(elevState, elevConfig)
+
+				fmt.Println("dog ressurected")
+			}
+
+			elevState.Disconnected = networkDisconnected
+			fmt.Println("case main elevState.Disconnected:", elevState.Disconnected)
+
+			listenFunctionDisconnectedChannel <- networkDisconnected
+			sendFunctionDisconnectChannel <- networkDisconnected
+
+		/*
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
+			fmt.Println("new button press!")
 
 			/*
 			 * If elevator is disconnected from the network it should only accept orders from its own cab
 			 */
 			if elevState.Disconnected {
 				if newOrder.Button == elevio.BT_Cab {
+					fmt.Println("accepted the cab call, even though the elevator is disconnected:")
+
 					elevState = elev.OnOrderChanged(
 						elevState,
 						elevConfig,
