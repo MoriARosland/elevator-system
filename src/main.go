@@ -107,16 +107,9 @@ func main() {
 	)
 
 	/*
-	 * Setup times
+	 * Setup timers
 	 */
-	doorTimeout := make(chan bool)
-	doorTimer := make(chan types.TimerActions)
-
-	go timer.Timer(
-		DOOR_OPEN_DURATION*time.Millisecond,
-		doorTimeout,
-		doorTimer,
-	)
+	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
 
 	/*
 	 * Main for/select
