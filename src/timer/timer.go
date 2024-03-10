@@ -45,7 +45,7 @@ func New(duration time.Duration) (chan bool, chan types.TimerActions) {
 	timer := make(chan types.TimerActions)
 
 	go Timer(
-		duration*time.Millisecond,
+		duration,
 		timeout,
 		timer,
 	)
