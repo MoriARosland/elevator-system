@@ -234,7 +234,7 @@ func ReassignOrders(
 					},
 					nodeID,
 					elevConfig.NumNodes,
-					nodeID,
+					elevConfig.NodeID,
 				)
 			}
 		}

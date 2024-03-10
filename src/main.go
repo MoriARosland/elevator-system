@@ -7,7 +7,6 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"fmt"
 	"time"
 )
 
@@ -147,14 +146,12 @@ func main() {
 			)
 
 		case lostNode := <-reassignOrders:
-
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
 				lostNode,
 				sendSecureMsg,
 			)
-			fmt.Println("Orders reassigned")
 
 		/*
 		 * Handle button presses
@@ -385,7 +382,6 @@ func main() {
 					sendSecureMsg,
 					doorTimer,
 				)
-				fmt.Println("Orders updated")
 			}
 
 			/*

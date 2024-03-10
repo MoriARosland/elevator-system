@@ -45,11 +45,10 @@ func minTimeToServed(timeToServed []int) int {
 }
 
 func printNextNode(elevState *types.ElevState, elevConfig *types.ElevConfig) {
-	// fmt.Print("\033[2J\033[2;0H\r  ")
-	fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ",
+	fmt.Print("\033[2J\033[2;0H\r  ")
+	fmt.Printf("ID: %d | NextID: %d | NextAddr: %s \n",
 		elevConfig.NodeID,
 		elevState.NextNode.ID,
 		elevState.NextNode.Addr,
 	)
-	fmt.Println()
 }

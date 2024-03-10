@@ -92,7 +92,6 @@ func MonitorNextNode(
 				}
 
 				if !isAlive {
-					fmt.Println("Starting Sync")
 					nodeRevived <- nextNodeID
 				}
 
@@ -120,7 +119,6 @@ func MonitorNextNode(
 			}
 
 			if previouslyAlive {
-				fmt.Println("Lost Node", nextNodeID)
 				nodeDied <- nextNodeID
 				previouslyAlive = false
 			}
