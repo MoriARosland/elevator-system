@@ -15,17 +15,17 @@ const (
 	SYNC
 )
 
+/*
+ * OldAssignee is set on reassignment bids
+ * and -1 for assignment bids
+ */
 type Bid struct {
 	Order        Order
 	TimeToServed []int
+	OldAssignee  int
 }
 
 type Assign struct {
-	Order    Order
-	Assignee int
-}
-
-type Reassign struct {
 	Order       Order
 	NewAssignee int
 	OldAssignee int
@@ -50,7 +50,7 @@ type Header struct {
 }
 
 type Content interface {
-	Bid | Assign | Reassign | Served | Sync
+	Bid | Assign | Served | Sync
 }
 
 type Msg[T Content] struct {
