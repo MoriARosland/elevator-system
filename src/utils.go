@@ -1,6 +1,7 @@
 package main
 
 import (
+	"elevator/types"
 	"flag"
 	"fmt"
 	"os"
@@ -29,7 +30,7 @@ func parseCommandlineFlags() (int, int, int, int) {
 /*
  * Find the index of the lowest value that is not -1
  */
-func MinTimeToServed(timeToServed []int) int {
+func minTimeToServed(timeToServed []int) int {
 	result := slices.Max(timeToServed)
 
 	for _, value := range timeToServed {
@@ -41,4 +42,13 @@ func MinTimeToServed(timeToServed []int) int {
 	}
 
 	return slices.Index(timeToServed, result)
+}
+
+func printNextNode(elevState *types.ElevState, elevConfig *types.ElevConfig) {
+	fmt.Print("\033[2J\033[2;0H\r  ")
+	fmt.Printf("ID: %d | NextID: %d | NextAddr: %s ",
+		elevConfig.NodeID,
+		elevState.NextNode.ID,
+		elevState.NextNode.Addr,
+	)
 }

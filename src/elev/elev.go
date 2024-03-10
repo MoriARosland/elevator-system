@@ -103,11 +103,12 @@ func UpdateState(
  * Initiate elevator driver and elevator polling
  */
 func InitDriver(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
 	port int,
-	numFloors int,
 ) (chan elevio.ButtonEvent, chan int, chan bool) {
 
-	elevio.Init(fmt.Sprintf("localhost:%d", port), numFloors)
+	elevio.Init(fmt.Sprintf("localhost:%d", port), elevConfig.NumFloors)
 
 	drvButtons := make(chan elevio.ButtonEvent)
 	drvFloors := make(chan int)
@@ -116,6 +117,13 @@ func InitDriver(
 	go elevio.PollButtons(drvButtons)
 	go elevio.PollFloorSensor(drvFloors)
 	go elevio.PollObstructionSwitch(drvObstr)
+
+	/*
+	 * Reset elevator to known state
+	 */
+	elevio.SetDoorOpenLamp(false)
+	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	SetHallLights(elevState.Orders, elevConfig)
 
 	return drvButtons, drvFloors, drvObstr
 }
@@ -172,6 +180,35 @@ func OnOrderChanged(
 ) *types.ElevState {
 
 	elevState.Orders[assignee][order.Floor][order.Button] = newStatus
+
+	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
+	SetHallLights(elevState.Orders, elevConfig)
+
+	return elevState
+}
+
+/*
+ * Merges incoming order list with the current order list
+ * Hall orders are overwritten while cab orders are ored
+ */
+func OnSync(elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	newOrders [][][]bool,
+) *types.ElevState {
+
+	for elevator := range newOrders {
+		for floor := range newOrders[elevator] {
+			for btn := range newOrders[elevator][floor] {
+				if btn == elevio.BT_Cab && elevator == elevConfig.NodeID {
+					// Merge cab orders
+					elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn] || elevState.Orders[elevator][floor][btn]
+				} else {
+					// Overwrite hall orders
+					elevState.Orders[elevator][floor][btn] = newOrders[elevator][floor][btn]
+				}
+			}
+		}
+	}
 
 	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
 	SetHallLights(elevState.Orders, elevConfig)
