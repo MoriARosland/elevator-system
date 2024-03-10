@@ -41,6 +41,7 @@ func FormatAssignMsg(
 	oldAssignee int,
 	author int,
 ) []byte {
+
 	msg := types.Msg[types.Assign]{
 		Header: types.Header{
 			Type:     types.ASSIGN,

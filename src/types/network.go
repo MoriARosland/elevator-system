@@ -15,6 +15,10 @@ const (
 	SYNC
 )
 
+type OrderStatus int
+
+const UNASSIGNED OrderStatus = -1
+
 /*
  * OldAssignee is set on reassignment bids
  * and -1 for assignment bids

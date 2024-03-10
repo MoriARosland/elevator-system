@@ -160,7 +160,7 @@ func main() {
 				sendSecureMsg <- network.FormatAssignMsg(
 					newOrder,
 					elevConfig.NodeID,
-					-1,
+					int(types.UNASSIGNED),
 					elevConfig.NodeID,
 				)
 
@@ -173,7 +173,7 @@ func main() {
 			sendSecureMsg <- network.FormatBidMsg(
 				nil,
 				newOrder,
-				-1,
+				int(types.UNASSIGNED),
 				elevConfig.NumNodes,
 				elevConfig.NodeID,
 			)
@@ -289,7 +289,7 @@ func main() {
 				/*
 				 * In case of an order reassign
 				 */
-				if assignMsg.OldAssignee != -1 {
+				if assignMsg.OldAssignee != int(types.UNASSIGNED) {
 					elevState = elev.OnOrderChanged(
 						elevState,
 						elevConfig,
