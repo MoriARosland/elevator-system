@@ -65,9 +65,6 @@ func main() {
 
 	for {
 		select {
-		/*
-		 * Handle new next node
-		 */
 		case newNextNode := <-updateNextNode:
 			if elevState.NextNode == newNextNode {
 				continue
@@ -92,9 +89,6 @@ func main() {
 				sendSecureMsg,
 			)
 
-		/*
-		 * Update elevator network status
-		 */
 		case disconnected := <-networkStatus:
 			if !disconnected {
 				updateNextNode, nextNodeRevived, nextNodeDied = network.InitWatchdog(elevConfig)
@@ -105,9 +99,6 @@ func main() {
 			disableListen <- disconnected
 			disableSecureSend <- disconnected
 
-		/*
-		 * Handle incomming orders (button presses)
-		 */
 		case newOrder := <-drvButtons:
 			elevState = elev.HandleNewOrder(
 				elevState,
@@ -118,9 +109,6 @@ func main() {
 				floorTimer,
 			)
 
-		/*
-		 * Handle floor arrivals
-		 */
 		case newFloor := <-drvFloors:
 			elevState = elev.HandleFloorArrival(
 				elevState,
@@ -131,9 +119,6 @@ func main() {
 				floorTimer,
 			)
 
-		/*
-		 * Handle door obstructions
-		 */
 		case isObstructed := <-drvObstr:
 			elevState = elev.HandleDoorObstr(
 				elevState,
@@ -142,9 +127,6 @@ func main() {
 				doorTimer,
 			)
 
-		/*
-		 * Handle incomming UDP messages
-		 */
 		case encodedMsg := <-incomingMessage:
 			header, err := network.GetMsgHeader(encodedMsg)
 
@@ -160,9 +142,6 @@ func main() {
 
 			switch header.Type {
 			case types.BID:
-				/*
-				 * Handle bid
-				 */
 				bidMsg, err := network.GetMsgContent[types.Bid](encodedMsg)
 
 				if err != nil {
@@ -199,9 +178,6 @@ func main() {
 				)
 
 			case types.ASSIGN:
-				/*
-				 * Handle assign
-				 */
 				assignMsg, err := network.GetMsgContent[types.Assign](encodedMsg)
 
 				if err != nil {
@@ -216,9 +192,6 @@ func main() {
 					true,
 				)
 
-				/*
-				 * In case of an order reassign
-				 */
 				if assignMsg.OldAssignee != int(types.UNASSIGNED) {
 					elevState = elev.SetOrderStatus(
 						elevState,
@@ -259,9 +232,6 @@ func main() {
 				continue
 
 			case types.SERVED:
-				/*
-				 * Handle served
-				 */
 				servedMsg, err := network.GetMsgContent[types.Served](encodedMsg)
 
 				if err != nil {
@@ -277,9 +247,6 @@ func main() {
 				)
 
 			case types.SYNC:
-				/*
-				 * Handle sync
-				 */
 				syncMsg, err := network.GetMsgContent[types.Sync](encodedMsg)
 
 				if err != nil {
@@ -310,9 +277,6 @@ func main() {
 				encodedMsg = network.FormatSyncMsg(elevState.Orders, syncMsg.TargetID, header.AuthorID)
 			}
 
-			/*
-			 * Forward message
-			 */
 			if !isReply {
 				network.Send(elevState.NextNode.Addr, encodedMsg)
 			}
@@ -345,9 +309,6 @@ func main() {
 			)
 
 		default:
-			/*
-			 * Do nothing
-			 */
 			continue
 		}
 	}
