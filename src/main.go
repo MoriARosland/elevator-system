@@ -60,8 +60,9 @@ func main() {
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-	syncNextNode := make(chan int)
-	reassignOrders := make(chan int)
+	nextNodeRevived := make(chan bool)
+	nextNodeDied := make(chan int)
+
 	terminationComplete := make(chan bool)
 	destoryWatchdog := make(chan bool)
 
@@ -70,8 +71,8 @@ func main() {
 		elev.FindNextNodeID(elevConfig),
 
 		updateNextNode,
-		syncNextNode,
-		reassignOrders,
+		nextNodeRevived,
+		nextNodeDied,
 
 		terminationComplete,
 		destoryWatchdog,
@@ -150,9 +151,8 @@ func main() {
 		/*
 		 * Sync new next node
 		 */
-		case targetNode := <-syncNextNode:
+		case <-nextNodeRevived:
 			sendSecureMsg <- network.FormatSyncMsg(
-				targetNode,
 				elevState.Orders,
 				elevConfig.NodeID,
 			)
@@ -174,8 +174,8 @@ func main() {
 					elev.FindNextNodeID(elevConfig),
 
 					updateNextNode,
-					syncNextNode,
-					reassignOrders,
+					nextNodeRevived,
+					nextNodeDied,
 
 					terminationComplete,
 					destoryWatchdog,
@@ -198,7 +198,7 @@ func main() {
 
 			fmt.Println("case main elevState.Disconnected updated to:", elevState.Disconnected)
 
-		case lostNode := <-reassignOrders:
+		case lostNode := <-nextNodeDied:
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
@@ -450,30 +450,26 @@ func main() {
 					continue
 				}
 
-				if syncMsg.TargetID != elevConfig.NodeID {
-					break
-				}
-
 				elevState = elev.OnSync(
 					elevState,
 					elevConfig,
 					syncMsg.Orders,
 				)
 
-				if elevState.Dirn != elevio.MD_Stop {
-					break
+				if elevState.Dirn == elevio.MD_Stop {
+					fsmOutput := fsm.OnSync(elevState, elevConfig)
+
+					elevState = elev.UpdateState(
+						elevState,
+						elevConfig,
+						fsmOutput,
+						sendSecureMsg,
+						doorTimer,
+						floorTimer,
+					)
 				}
 
-				fsmOutput := fsm.OnSync(elevState, elevConfig)
-
-				elevState = elev.UpdateState(
-					elevState,
-					elevConfig,
-					fsmOutput,
-					sendSecureMsg,
-					doorTimer,
-					floorTimer,
-				)
+				encodedMsg = network.FormatSyncMsg(elevState.Orders, header.AuthorID)
 			}
 
 			/*

@@ -19,7 +19,7 @@ func MonitorNextNode(
 	nextNodeID int,
 
 	updateNextNode chan<- types.NextNode,
-	nodeRevived chan<- int,
+	nodeRevived chan<- bool,
 	nodeDied chan<- int,
 
 	terminationComplete chan bool,
@@ -92,7 +92,7 @@ func MonitorNextNode(
 				}
 
 				if !isAlive {
-					nodeRevived <- nextNodeID
+					nodeRevived <- true
 				}
 
 				isAlive = true
