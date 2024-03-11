@@ -122,18 +122,17 @@ func MonitorNextNode(
 
 			if previouslyAlive {
 				nodeDied <- nextNodeID
-
 				previouslyAlive = false
 			}
 
 			if nextNodeID == calcPrevNodeID(elevConfig) {
 				/*
-				 * There are no other nodes alive
+				 * There are no other nodes alive, enter single elev mode
 				 */
 				if isAlive {
 					updateNextNode <- types.NextNode{
-						ID:   -1,
-						Addr: "",
+						ID:   elevConfig.NodeID,
+						Addr: fmt.Sprintf("%s:%d", LocalIP(), elevConfig.BroadcastPort),
 					}
 				}
 
@@ -186,4 +185,24 @@ func calcNextNodeID(elevConfig *types.ElevConfig, nodeID int) int {
 	}
 
 	return nextNodeID
+}
+
+func InitWatchdog(elevConfig *types.ElevConfig) (chan types.NextNode, chan int, chan int) {
+	updateNextNode := make(chan types.NextNode)
+	nextNodeRevived := make(chan int)
+	nextNodeDied := make(chan int)
+
+	go MonitorNextNode(
+		elevConfig,
+		calcNextNodeID(elevConfig, elevConfig.NodeID),
+
+		updateNextNode,
+		nextNodeRevived,
+		nextNodeDied,
+
+		make(chan bool),
+		make(chan bool),
+	)
+
+	return updateNextNode, nextNodeRevived, nextNodeDied
 }

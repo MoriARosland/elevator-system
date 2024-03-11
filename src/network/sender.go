@@ -113,3 +113,19 @@ func SecureSend(
 		}
 	}
 }
+
+func InitSecureSend() (chan string, chan types.Header, chan []byte, chan bool) {
+	updateNextNodeAddr := make(chan string)
+	replyReceived := make(chan types.Header)
+	sendSecureMsg := make(chan []byte)
+	disableSecureSend := make(chan bool)
+
+	go SecureSend(
+		updateNextNodeAddr,
+		replyReceived,
+		sendSecureMsg,
+		disableSecureSend,
+	)
+
+	return updateNextNodeAddr, replyReceived, sendSecureMsg, disableSecureSend
+}
