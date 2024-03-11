@@ -440,11 +440,16 @@ func main() {
 				sendSecureMsg,
 			)
 
+		/*
+		 * Reassign order if we are stuck between floors
+		 */
 		case <-floorTimeout:
 			elevState.StuckBetweenFloors = true
+
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
+				elevConfig.NodeID,
 				sendSecureMsg,
 			)
 
