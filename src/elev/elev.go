@@ -61,10 +61,15 @@ func UpdateState(
 	stateChanges types.FsmOutput,
 	sendSecureMsg chan<- []byte,
 	doorTimer chan<- types.TimerActions,
+	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
 
 	if stateChanges.SetMotor {
 		elevio.SetMotorDirection(stateChanges.MotorDirn)
+
+		if stateChanges.MotorDirn != elevio.MD_Stop {
+			floorTimer <- types.START
+		}
 	}
 
 	elevio.SetDoorOpenLamp(stateChanges.Door)
