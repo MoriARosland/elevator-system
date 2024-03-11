@@ -57,7 +57,7 @@ func main() {
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-	syncNextNode := make(chan int)
+	syncNextNode := make(chan bool)
 	reassignOrders := make(chan int)
 
 	go network.MonitorNextNode(
@@ -141,9 +141,8 @@ func main() {
 		/*
 		 * Sync new next node
 		 */
-		case targetNode := <-syncNextNode:
+		case <-syncNextNode:
 			sendSecureMsg <- network.FormatSyncMsg(
-				targetNode,
 				elevState.Orders,
 				elevConfig.NodeID,
 			)
@@ -373,30 +372,26 @@ func main() {
 					continue
 				}
 
-				if syncMsg.TargetID != elevConfig.NodeID {
-					break
-				}
-
 				elevState = elev.OnSync(
 					elevState,
 					elevConfig,
 					syncMsg.Orders,
 				)
 
-				if elevState.Dirn != elevio.MD_Stop {
-					break
+				if elevState.Dirn == elevio.MD_Stop {
+					fsmOutput := fsm.OnSync(elevState, elevConfig)
+
+					elevState = elev.UpdateState(
+						elevState,
+						elevConfig,
+						fsmOutput,
+						sendSecureMsg,
+						doorTimer,
+						floorTimer,
+					)
 				}
 
-				fsmOutput := fsm.OnSync(elevState, elevConfig)
-
-				elevState = elev.UpdateState(
-					elevState,
-					elevConfig,
-					fsmOutput,
-					sendSecureMsg,
-					doorTimer,
-					floorTimer,
-				)
+				encodedMsg = network.FormatSyncMsg(elevState.Orders, header.AuthorID)
 			}
 
 			/*
