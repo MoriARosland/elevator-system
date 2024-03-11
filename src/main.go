@@ -58,7 +58,7 @@ func main() {
 	 */
 	updateNextNode := make(chan types.NextNode)
 	nextNodeRevived := make(chan bool)
-	reassignOrders := make(chan int)
+	nextNodeDied := make(chan int)
 
 	go network.MonitorNextNode(
 		elevConfig,
@@ -66,7 +66,7 @@ func main() {
 
 		updateNextNode,
 		nextNodeRevived,
-		reassignOrders,
+		nextNodeDied,
 
 		make(chan bool),
 		make(chan bool),
@@ -147,7 +147,7 @@ func main() {
 				elevConfig.NodeID,
 			)
 
-		case lostNode := <-reassignOrders:
+		case lostNode := <-nextNodeDied:
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
