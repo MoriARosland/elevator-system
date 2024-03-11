@@ -23,18 +23,18 @@ func Send(addr string, msg []byte) {
 	receiverPort := strings.Split(addr, ":")[1]
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%s", receiverPort))
 	if err != nil {
-		panic(err)
+		return
 	}
 	defer packetConnection.Close()
 
 	resolvedAddr, err := net.ResolveUDPAddr("udp4", addr)
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	_, err = packetConnection.WriteTo(msg, resolvedAddr)
 	if err != nil {
-		panic(err)
+		return
 	}
 }
 
@@ -46,21 +46,26 @@ func SecureSend(
 	updateAddr <-chan string,
 	replyReceived <-chan types.Header,
 	msgChan <-chan []byte,
+	disableSecureSend <-chan bool,
 ) {
 
 	var addr string
 	var msgBuffer [][]byte
+	var disabled bool
 
 	msgTimeOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
 	msgTimeOut.Stop()
 
 	for {
 		select {
+		case disabled = <-disableSecureSend:
+
 		case newAddr := <-updateAddr:
 			addr = newAddr
 
 			if addr == "" {
 				msgBuffer = nil
+				msgTimeOut.Stop()
 			}
 
 		case replyHeader := <-replyReceived:
@@ -87,6 +92,10 @@ func SecureSend(
 			msgTimeOut.Reset(MSG_TIMEOUT * time.Millisecond)
 
 		case msg := <-msgChan:
+			if disabled {
+				continue
+			}
+
 			msgBuffer = append(msgBuffer, msg)
 
 			if len(msgBuffer) == 1 {
@@ -95,14 +104,11 @@ func SecureSend(
 			}
 
 		case <-msgTimeOut.C:
-			if len(msgBuffer) > 0 {
+			if len(msgBuffer) > 0 && !disabled {
 				Send(addr, msgBuffer[0])
 			}
 
 		default:
-			/*
-			 * Do nothing
-			 */
 			continue
 		}
 	}

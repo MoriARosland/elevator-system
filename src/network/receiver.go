@@ -2,33 +2,59 @@ package network
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/libp2p/go-reuseport"
 )
 
-const BUFFER_SIZE = 1024
-
 /*
  * Listen for incoming messages on specified IP and port.
  */
-func ListenForMessages(ip string, port int, messageChannel chan<- []byte) {
-	conn, err := reuseport.ListenPacket("udp4", fmt.Sprintf("%s:%d", ip, port))
+func ListenForMessages(
+	ip string,
+	port int,
+	outgoingMessage chan<- []byte,
+	disableListen chan bool,
+) {
+
+	const BUFFER_SIZE = 1024
+	const LISTEN_TIMEOUT = 500
+
+	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf("%s:%d", ip, port))
 
 	if err != nil {
-		panic(err)
+		panic("Could not connect to network")
 	}
 
-	defer conn.Close()
+	defer packetConnection.Close()
 
 	buffer := make([]byte, BUFFER_SIZE)
 
+	var disabled bool
+
 	for {
-		n, _, err := conn.ReadFrom(buffer)
+		select {
+		case disabled = <-disableListen:
 
-		if err != nil {
-			panic(err)
+		default:
+			if disabled {
+				continue
+			}
+
+			deadline := time.Now().Add(LISTEN_TIMEOUT * time.Millisecond)
+			err := packetConnection.SetReadDeadline(deadline)
+
+			if err != nil {
+				continue
+			}
+
+			n, _, err := packetConnection.ReadFrom(buffer)
+
+			if err != nil {
+				continue
+			}
+
+			outgoingMessage <- buffer[:n]
 		}
-
-		messageChannel <- buffer[:n]
 	}
 }

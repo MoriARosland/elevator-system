@@ -45,11 +45,13 @@ func main() {
 	 * Continuously listen for messages from previous node
 	 */
 	incomingMessageChannel := make(chan []byte)
+	disableListen := make(chan bool)
 
 	go network.ListenForMessages(
 		network.LocalIP(),
 		elevConfig.BroadcastPort,
 		incomingMessageChannel,
+		disableListen,
 	)
 
 	/*
@@ -57,7 +59,7 @@ func main() {
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-	nextNodeRevived := make(chan bool)
+	nextNodeRevived := make(chan int)
 	nextNodeDied := make(chan int)
 
 	go network.MonitorNextNode(
@@ -78,11 +80,13 @@ func main() {
 	updateNextNodeAddr := make(chan string)
 	replyReceived := make(chan types.Header)
 	sendSecureMsg := make(chan []byte)
+	disableSecureSend := make(chan bool)
 
 	go network.SecureSend(
 		updateNextNodeAddr,
 		replyReceived,
 		sendSecureMsg,
+		disableSecureSend,
 	)
 
 	/*
@@ -118,13 +122,15 @@ func main() {
 	/*
 	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
 	 */
-	go network.Broadcast(elevConfig.BroadcastPort)
+	networkStatus := make(chan bool)
+	go network.Broadcast(elevConfig.BroadcastPort, networkStatus)
 
 	/*
 	 * Main for/select
 	 */
 	for {
 		select {
+
 		/*
 		 * Handle new next node
 		 */
@@ -138,27 +144,83 @@ func main() {
 
 			printNextNode(elevState, elevConfig)
 
-		/*
-		 * Sync new next node
-		 */
-		case <-nextNodeRevived:
+		case nodeID := <-nextNodeRevived:
 			sendSecureMsg <- network.FormatSyncMsg(
 				elevState.Orders,
+				nodeID,
 				elevConfig.NodeID,
 			)
 
-		case lostNode := <-nextNodeDied:
+		case nodeID := <-nextNodeDied:
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
-				lostNode,
+				nodeID,
 				sendSecureMsg,
 			)
+
+		/*
+		 * Update elevator network status
+		 */
+		case disconnected := <-networkStatus:
+			if !disconnected {
+				go network.MonitorNextNode(
+					elevConfig,
+					elev.FindNextNodeID(elevConfig),
+
+					updateNextNode,
+					nextNodeRevived,
+					nextNodeDied,
+
+					make(chan bool),
+					make(chan bool),
+				)
+
+				/*
+				 * Wait until we know the status of the other nodes in the circle
+				 */
+				elevState.NextNode = <-updateNextNode
+				updateNextNodeAddr <- elevState.NextNode.Addr
+
+				printNextNode(elevState, elevConfig)
+			}
+
+			elevState.Disconnected = disconnected
+
+			disableListen <- disconnected
+			disableSecureSend <- disconnected
 
 		/*
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
+			/*
+			 * If elevator is disconnected from the network, it should only accept orders from its own cab
+			 */
+			if elevState.Disconnected {
+				if newOrder.Button == elevio.BT_Cab {
+					elevState = elev.OnOrderChanged(
+						elevState,
+						elevConfig,
+						elevConfig.NodeID,
+						newOrder,
+						true,
+					)
+
+					fsmOutput := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
+
+					elevState = elev.UpdateState(
+						elevState,
+						elevConfig,
+						fsmOutput,
+						sendSecureMsg,
+						doorTimer,
+						floorTimer,
+					)
+				}
+				continue
+			}
+
 			/*
 			 * Cab orders are directly selfassigned
 			 */
@@ -378,7 +440,9 @@ func main() {
 					syncMsg.Orders,
 				)
 
-				if elevState.Dirn == elevio.MD_Stop {
+				isTarget := syncMsg.TargetID == elevConfig.NodeID
+
+				if isTarget && elevState.Dirn == elevio.MD_Stop {
 					fsmOutput := fsm.OnSync(elevState, elevConfig)
 
 					elevState = elev.UpdateState(
@@ -391,7 +455,7 @@ func main() {
 					)
 				}
 
-				encodedMsg = network.FormatSyncMsg(elevState.Orders, header.AuthorID)
+				encodedMsg = network.FormatSyncMsg(elevState.Orders, syncMsg.TargetID, header.AuthorID)
 			}
 
 			/*
