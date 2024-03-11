@@ -132,8 +132,8 @@ func MonitorNextNode(
 				 */
 				if isAlive {
 					updateNextNode <- types.NextNode{
-						ID:   -1,
-						Addr: "",
+						ID:   elevConfig.NodeID,
+						Addr: fmt.Sprintf("%s:%d", LocalIP(), elevConfig.BroadcastPort),
 					}
 				}
 
