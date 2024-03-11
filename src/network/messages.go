@@ -35,15 +35,22 @@ func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
 	return &content, nil
 }
 
-func FormatAssignMsg(order types.Order, assignee int, author int) []byte {
+func FormatAssignMsg(
+	order types.Order,
+	newAssignee int,
+	oldAssignee int,
+	author int,
+) []byte {
+
 	msg := types.Msg[types.Assign]{
 		Header: types.Header{
 			Type:     types.ASSIGN,
 			AuthorID: author,
 		},
 		Content: types.Assign{
-			Order:    order,
-			Assignee: assignee,
+			Order:       order,
+			NewAssignee: newAssignee,
+			OldAssignee: oldAssignee,
 		},
 	}
 
@@ -67,6 +74,7 @@ func FormatServedMsg(order types.Order, author int) []byte {
 func FormatBidMsg(
 	timeToServed []int,
 	order types.Order,
+	oldAssignee int,
 	NumNodes int,
 	author int,
 ) []byte {
@@ -87,6 +95,7 @@ func FormatBidMsg(
 		Content: types.Bid{
 			Order:        order,
 			TimeToServed: timeToServed,
+			OldAssignee:  oldAssignee,
 		},
 	}
 

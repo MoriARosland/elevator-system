@@ -14,6 +14,8 @@ import (
 const NUM_BUTTONS = 3
 const NUM_FLOORS = 4
 const DOOR_OPEN_DURATION = 3000
+const DOOR_OBSTR_TIMEOUT = 6000
+const FLOOR_ARRIVAL_TIMEOUT = 6000
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
@@ -58,6 +60,7 @@ func main() {
 	 */
 	updateNextNode := make(chan types.NextNode)
 	syncNextNode := make(chan int)
+	reassignOrders := make(chan int)
 	terminationComplete := make(chan bool)
 	destoryWatchdog := make(chan bool)
 
@@ -67,6 +70,7 @@ func main() {
 
 		updateNextNode,
 		syncNextNode,
+		reassignOrders,
 
 		terminationComplete,
 		destoryWatchdog,
@@ -101,25 +105,21 @@ func main() {
 	printNextNode(elevState, elevConfig)
 
 	/*
+	 * Setup timers
+	 */
+	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
+	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
+	floorTimeout, floorTimer := timer.New(FLOOR_ARRIVAL_TIMEOUT * time.Millisecond)
+
+	/*
 	 * In case we start between two floors
 	 */
 	if 0 > elevio.GetFloor() {
 		elevio.SetMotorDirection(elevio.MD_Down)
 		elevState.Dirn = elevio.MD_Down
 		fsm.OnInitBetweenFloors()
+		floorTimer <- types.START
 	}
-
-	/*
-	 * Setup timers
-	 */
-	doorTimeout := make(chan bool)
-	doorTimer := make(chan types.TimerActions)
-
-	go timer.Timer(
-		DOOR_OPEN_DURATION*time.Millisecond,
-		doorTimeout,
-		doorTimer,
-	)
 
 	/*
 	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
@@ -194,6 +194,14 @@ func main() {
 			listenFunctionDisconnectedChannel <- networkDisconnected
 			sendFunctionDisconnectChannel <- networkDisconnected
 
+		case lostNode := <-reassignOrders:
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				lostNode,
+				sendSecureMsg,
+			)
+
 		/*
 		 * Handle button presses
 		 */
@@ -223,16 +231,11 @@ func main() {
 						fsmOutput,
 						sendSecureMsg,
 						doorTimer,
+						floorTimer,
 					)
 				}
 				continue
 			}
-
-			if elevState.ProcessingOrder {
-				continue
-			}
-
-			elevState.ProcessingOrder = true
 
 			/*
 			 * Cab orders are directly selfassigned
@@ -241,6 +244,7 @@ func main() {
 				sendSecureMsg <- network.FormatAssignMsg(
 					newOrder,
 					elevConfig.NodeID,
+					int(types.UNASSIGNED),
 					elevConfig.NodeID,
 				)
 
@@ -253,6 +257,7 @@ func main() {
 			sendSecureMsg <- network.FormatBidMsg(
 				nil,
 				newOrder,
+				int(types.UNASSIGNED),
 				elevConfig.NumNodes,
 				elevConfig.NodeID,
 			)
@@ -261,8 +266,13 @@ func main() {
 		 * Handle floor arrivals
 		 */
 		case newCurrentFloor := <-drvFloors:
+			oldFloor := elevState.Floor
+
 			elevState.Floor = newCurrentFloor
 			elevio.SetFloorIndicator(newCurrentFloor)
+
+			floorTimer <- types.STOP
+			elevState.StuckBetweenFloors = false
 
 			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
 
@@ -272,7 +282,12 @@ func main() {
 				fsmOutput,
 				sendSecureMsg,
 				doorTimer,
+				floorTimer,
 			)
+
+			if !fsmOutput.SetMotor && oldFloor != -1 {
+				floorTimer <- types.START
+			}
 
 		/*
 		 * Handle door obstructions
@@ -280,6 +295,12 @@ func main() {
 		case isObstructed := <-drvObstr:
 			if elevState.DoorObstr == isObstructed {
 				continue
+			}
+
+			if isObstructed {
+				obstrTimer <- types.START
+			} else {
+				obstrTimer <- types.STOP
 			}
 
 			doorTimer <- types.START
@@ -312,11 +333,13 @@ func main() {
 					continue
 				}
 
-				bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
-					elevState,
-					elevConfig,
-					bidMsg.Order,
-				)
+				if !elevState.DoorObstr || !elevState.StuckBetweenFloors {
+					bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
+						elevState,
+						elevConfig,
+						bidMsg.Order,
+					)
+				}
 
 				if isReply {
 					assignee := minTimeToServed(bidMsg.TimeToServed)
@@ -324,6 +347,7 @@ func main() {
 					sendSecureMsg <- network.FormatAssignMsg(
 						bidMsg.Order,
 						assignee,
+						bidMsg.OldAssignee,
 						elevConfig.NodeID,
 					)
 
@@ -333,6 +357,7 @@ func main() {
 				encodedMsg = network.FormatBidMsg(
 					bidMsg.TimeToServed,
 					bidMsg.Order,
+					bidMsg.OldAssignee,
 					elevConfig.NumNodes,
 					header.AuthorID,
 				)
@@ -350,10 +375,23 @@ func main() {
 				elevState = elev.OnOrderChanged(
 					elevState,
 					elevConfig,
-					assignMsg.Assignee,
+					assignMsg.NewAssignee,
 					assignMsg.Order,
 					true,
 				)
+
+				/*
+				 * In case of an order reassign
+				 */
+				if assignMsg.OldAssignee != int(types.UNASSIGNED) {
+					elevState = elev.OnOrderChanged(
+						elevState,
+						elevConfig,
+						assignMsg.OldAssignee,
+						assignMsg.Order,
+						false,
+					)
+				}
 
 				/*
 				 * Make sure that the message is forwarded before updating
@@ -361,11 +399,9 @@ func main() {
 				 */
 				if !isReply {
 					network.Send(elevState.NextNode.Addr, encodedMsg)
-				} else {
-					elevState.ProcessingOrder = false
 				}
 
-				if assignMsg.Assignee != elevConfig.NodeID {
+				if assignMsg.NewAssignee != elevConfig.NodeID {
 					continue
 				}
 
@@ -381,14 +417,10 @@ func main() {
 					fsmOutput,
 					sendSecureMsg,
 					doorTimer,
+					floorTimer,
 				)
 
 				continue
-
-			case types.REASSIGN:
-				/*
-				 * Handle reassign
-				 */
 
 			case types.SERVED:
 				/*
@@ -440,8 +472,8 @@ func main() {
 					fsmOutput,
 					sendSecureMsg,
 					doorTimer,
+					floorTimer,
 				)
-
 			}
 
 			/*
@@ -469,6 +501,33 @@ func main() {
 				fsmOutput,
 				sendSecureMsg,
 				doorTimer,
+				floorTimer,
+			)
+
+		/*
+		 * Reassign orders if door obstruction times out
+		 */
+		case <-obstrTimeout:
+			obstrTimer <- types.STOP
+
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				elevConfig.NodeID,
+				sendSecureMsg,
+			)
+
+		/*
+		 * Reassign order if we are stuck between floors
+		 */
+		case <-floorTimeout:
+			elevState.StuckBetweenFloors = true
+
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				elevConfig.NodeID,
+				sendSecureMsg,
 			)
 
 		default:

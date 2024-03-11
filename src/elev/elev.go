@@ -61,10 +61,15 @@ func UpdateState(
 	stateChanges types.FsmOutput,
 	sendSecureMsg chan<- []byte,
 	doorTimer chan<- types.TimerActions,
+	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
 
 	if stateChanges.SetMotor {
 		elevio.SetMotorDirection(stateChanges.MotorDirn)
+
+		if stateChanges.MotorDirn != elevio.MD_Stop {
+			floorTimer <- types.START
+		}
 	}
 
 	elevio.SetDoorOpenLamp(stateChanges.Door)
@@ -215,4 +220,29 @@ func OnSync(elevState *types.ElevState,
 	SetHallLights(elevState.Orders, elevConfig)
 
 	return elevState
+}
+
+func ReassignOrders(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	nodeID int,
+	sendSecureMsg chan<- []byte,
+) {
+
+	for floor := range elevState.Orders[nodeID] {
+		for btn, order := range elevState.Orders[nodeID][floor] {
+			if order && btn != elevio.BT_Cab {
+				sendSecureMsg <- network.FormatBidMsg(
+					nil,
+					types.Order{
+						Button: elevio.ButtonType(btn),
+						Floor:  floor,
+					},
+					nodeID,
+					elevConfig.NumNodes,
+					elevConfig.NodeID,
+				)
+			}
+		}
+	}
 }

@@ -38,5 +38,17 @@ func Timer(
 			continue
 		}
 	}
+}
 
+func New(duration time.Duration) (chan bool, chan types.TimerActions) {
+	timeout := make(chan bool)
+	timer := make(chan types.TimerActions)
+
+	go Timer(
+		duration,
+		timeout,
+		timer,
+	)
+
+	return timeout, timer
 }
