@@ -58,6 +58,7 @@ func main() {
 	 */
 	updateNextNode := make(chan types.NextNode)
 	syncNextNode := make(chan int)
+	reassignOrders := make(chan int)
 
 	go network.MonitorNextNode(
 		elevConfig,
@@ -65,6 +66,7 @@ func main() {
 
 		updateNextNode,
 		syncNextNode,
+		reassignOrders,
 
 		make(chan bool),
 		make(chan bool),
@@ -144,6 +146,14 @@ func main() {
 				targetNode,
 				elevState.Orders,
 				elevConfig.NodeID,
+			)
+
+		case lostNode := <-reassignOrders:
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				lostNode,
+				sendSecureMsg,
 			)
 
 		/*
@@ -426,14 +436,20 @@ func main() {
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
+				elevConfig.NodeID,
 				sendSecureMsg,
 			)
 
+		/*
+		 * Reassign order if we are stuck between floors
+		 */
 		case <-floorTimeout:
 			elevState.StuckBetweenFloors = true
+
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
+				elevConfig.NodeID,
 				sendSecureMsg,
 			)
 

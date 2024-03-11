@@ -224,11 +224,12 @@ func OnSync(elevState *types.ElevState,
 func ReassignOrders(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
+	nodeID int,
 	sendSecureMsg chan<- []byte,
 ) {
 
-	for floor := range elevState.Orders[elevConfig.NodeID] {
-		for btn, order := range elevState.Orders[elevConfig.NodeID][floor] {
+	for floor := range elevState.Orders[nodeID] {
+		for btn, order := range elevState.Orders[nodeID][floor] {
 			if order && btn != elevio.BT_Cab {
 				sendSecureMsg <- network.FormatBidMsg(
 					nil,
@@ -236,7 +237,7 @@ func ReassignOrders(
 						Button: elevio.ButtonType(btn),
 						Floor:  floor,
 					},
-					elevConfig.NodeID,
+					nodeID,
 					elevConfig.NumNodes,
 					elevConfig.NodeID,
 				)

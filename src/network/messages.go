@@ -78,6 +78,7 @@ func FormatBidMsg(
 	NumNodes int,
 	author int,
 ) []byte {
+
 	if len(timeToServed) == 0 {
 		timeToServed = make([]int, NumNodes)
 
