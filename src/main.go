@@ -106,94 +106,36 @@ func main() {
 			disableSecureSend <- disconnected
 
 		/*
-		 * Handle button presses
+		 * Handle incomming orders (button presses)
 		 */
 		case newOrder := <-drvButtons:
-			/*
-			 * If elevator is disconnected from the network, it should only accept orders from its own cab
-			 */
-			if elevState.Disconnected {
-				if newOrder.Button == elevio.BT_Cab {
-					elevState = elev.SetOrderStatus(
-						elevState,
-						elevConfig,
-						elevConfig.NodeID,
-						newOrder,
-						true,
-					)
-
-					fsmOutput := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
-
-					elevState = elev.SetState(
-						elevState,
-						elevConfig,
-						fsmOutput,
-						sendSecureMsg,
-						doorTimer,
-						floorTimer,
-					)
-				}
-
-				continue
-			}
-
-			/*
-			 * Cab orders are directly selfassigned
-			 */
-			if newOrder.Button == elevio.BT_Cab {
-				sendSecureMsg <- network.FormatAssignMsg(
-					newOrder,
-					elevConfig.NodeID,
-					int(types.UNASSIGNED),
-					elevConfig.NodeID,
-				)
-
-				continue
-			}
-
-			/*
-			 * Hall orders are assigned after a bidding round
-			 */
-			sendSecureMsg <- network.FormatBidMsg(
-				nil,
-				newOrder,
-				int(types.UNASSIGNED),
-				elevConfig.NumNodes,
-				elevConfig.NodeID,
-			)
-
-		/*
-		 * Handle floor arrivals
-		 */
-		case newCurrentFloor := <-drvFloors:
-			oldFloor := elevState.Floor
-
-			elevState.Floor = newCurrentFloor
-			elevio.SetFloorIndicator(newCurrentFloor)
-
-			floorTimer <- types.STOP
-			elevState.StuckBetweenFloors = false
-
-			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
-
-			elevState = elev.SetState(
+			elevState = elev.HandleNewOrder(
 				elevState,
 				elevConfig,
-				fsmOutput,
+				newOrder,
 				sendSecureMsg,
 				doorTimer,
 				floorTimer,
 			)
 
-			if !fsmOutput.SetMotor && oldFloor != -1 {
-				floorTimer <- types.START
-			}
+		/*
+		 * Handle floor arrivals
+		 */
+		case newFloor := <-drvFloors:
+			elevState = elev.HandleFloorArrival(
+				elevState,
+				elevConfig,
+				newFloor,
+				sendSecureMsg,
+				doorTimer,
+				floorTimer,
+			)
 
 		/*
 		 * Handle door obstructions
 		 */
 		case isObstructed := <-drvObstr:
-			elevState = elev.OnDoorObstr(
+			elevState = elev.HandleDoorObstr(
 				elevState,
 				isObstructed,
 				obstrTimer,

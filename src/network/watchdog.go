@@ -122,13 +122,12 @@ func MonitorNextNode(
 
 			if previouslyAlive {
 				nodeDied <- nextNodeID
-
 				previouslyAlive = false
 			}
 
 			if nextNodeID == calcPrevNodeID(elevConfig) {
 				/*
-				 * There are no other nodes alive
+				 * There are no other nodes alive, enter single elev mode
 				 */
 				if isAlive {
 					updateNextNode <- types.NextNode{

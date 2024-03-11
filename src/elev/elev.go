@@ -2,6 +2,7 @@ package elev
 
 import (
 	"Driver-go/elevio"
+	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
 	"fmt"
@@ -179,7 +180,7 @@ func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
 	}
 }
 
-func OnDoorObstr(
+func HandleDoorObstr(
 	elevState *types.ElevState,
 	isObstructed bool,
 	obstrTimer chan types.TimerActions,
@@ -275,4 +276,118 @@ func ReassignOrders(
 			)
 		}
 	}
+}
+
+func SelfAssignOrder(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	order types.Order,
+	sendSecureMsg chan<- []byte,
+	doorTimer chan<- types.TimerActions,
+	floorTimer chan<- types.TimerActions,
+) *types.ElevState {
+	elevState = SetOrderStatus(
+		elevState,
+		elevConfig,
+		elevConfig.NodeID,
+		order,
+		true,
+	)
+
+	fsmOutput := fsm.OnOrderAssigned(order, elevState, elevConfig)
+
+	elevState = SetState(
+		elevState,
+		elevConfig,
+		fsmOutput,
+		sendSecureMsg,
+		doorTimer,
+		floorTimer,
+	)
+
+	return elevState
+}
+
+func HandleNewOrder(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	order types.Order,
+	sendSecureMsg chan<- []byte,
+	doorTimer chan<- types.TimerActions,
+	floorTimer chan<- types.TimerActions,
+) *types.ElevState {
+	
+	isCabOrder := order.Button == elevio.BT_Cab
+
+	if elevState.Disconnected && isCabOrder {
+		/*
+		 * When disconnected we only handle new cab orders 
+		 */
+		elevState = SelfAssignOrder(
+			elevState,
+			elevConfig,
+			order,
+			sendSecureMsg,
+			doorTimer,
+			floorTimer,
+		)
+	} else if isCabOrder {
+		/*
+		 * Cab orders are selfassigned (over the network)
+		 */
+		sendSecureMsg <- network.FormatAssignMsg(
+			order,
+			elevConfig.NodeID,
+			int(types.UNASSIGNED),
+			elevConfig.NodeID,
+		)
+	} else {
+		/*
+		 * Hall orders are assigned after a bidding round
+		 */
+		sendSecureMsg <- network.FormatBidMsg(
+			nil,
+			order,
+			int(types.UNASSIGNED),
+			elevConfig.NumNodes,
+			elevConfig.NodeID,
+		)
+	}
+
+	return elevState
+}
+
+func HandleFloorArrival(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	newFloor int,
+	sendSecureMsg chan<- []byte,
+	doorTimer chan<- types.TimerActions,
+	floorTimer chan<- types.TimerActions,
+) *types.ElevState {
+
+	oldFloor := elevState.Floor
+
+	elevState.Floor = newFloor
+	elevio.SetFloorIndicator(newFloor)
+
+	floorTimer <- types.STOP
+	elevState.StuckBetweenFloors = false
+
+	fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
+
+	elevState = SetState(
+		elevState,
+		elevConfig,
+		fsmOutput,
+		sendSecureMsg,
+		doorTimer,
+		floorTimer,
+	)
+
+	if !fsmOutput.SetMotor && oldFloor != -1 {
+		floorTimer <- types.START
+	}
+
+	return elevState
 }
