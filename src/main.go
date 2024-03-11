@@ -35,7 +35,7 @@ func main() {
 
 	updateNextNode, nextNodeRevived, nextNodeDied := network.InitWatchdog(elevConfig)
 
-	updateNextNodeAddr, replyReceived, sendSecureMsg, disableSecureSend := network.InitSecureSend()
+	updateSecureSendAddr, replyReceived, sendSecureMsg, disableSecureSend := network.InitSecureSend()
 
 	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevState, elevConfig, elevServerPort)
 
@@ -43,19 +43,13 @@ func main() {
 	 * Wait until we know the status of the other nodes in the circle
 	 */
 	elevState.NextNode = <-updateNextNode
-	updateNextNodeAddr <- elevState.NextNode.Addr
+	updateSecureSendAddr <- elevState.NextNode.Addr
 	printNextNode(elevState, elevConfig)
 
-	/*
-	 * Setup timers
-	 */
 	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
 	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
 	floorTimeout, floorTimer := timer.New(FLOOR_ARRIVAL_TIMEOUT * time.Millisecond)
 
-	/*
-	 * In case we start between two floors
-	 */
 	if 0 > elevio.GetFloor() {
 		elevio.SetMotorDirection(elevio.MD_Down)
 		elevState.Dirn = elevio.MD_Down
@@ -63,9 +57,6 @@ func main() {
 		floorTimer <- types.START
 	}
 
-	/*
-	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
-	 */
 	networkStatus := make(chan bool)
 	go network.Broadcast(elevConfig.BroadcastPort, networkStatus)
 
@@ -83,8 +74,7 @@ func main() {
 			}
 
 			elevState.NextNode = newNextNode
-			updateNextNodeAddr <- elevState.NextNode.Addr
-
+			updateSecureSendAddr <- elevState.NextNode.Addr
 			printNextNode(elevState, elevConfig)
 
 		case nodeID := <-nextNodeRevived:
@@ -108,14 +98,6 @@ func main() {
 		case disconnected := <-networkStatus:
 			if !disconnected {
 				updateNextNode, nextNodeRevived, nextNodeDied = network.InitWatchdog(elevConfig)
-
-				/*
-				 * Wait until we know the status of the other nodes in the circle
-				 */
-				elevState.NextNode = <-updateNextNode
-				updateNextNodeAddr <- elevState.NextNode.Addr
-
-				printNextNode(elevState, elevConfig)
 			}
 
 			elevState.Disconnected = disconnected
@@ -211,18 +193,12 @@ func main() {
 		 * Handle door obstructions
 		 */
 		case isObstructed := <-drvObstr:
-			if elevState.DoorObstr == isObstructed {
-				continue
-			}
-
-			if isObstructed {
-				obstrTimer <- types.START
-			} else {
-				obstrTimer <- types.STOP
-			}
-
-			doorTimer <- types.START
-			elevState.DoorObstr = isObstructed
+			elevState = elev.OnDoorObstr(
+				elevState,
+				isObstructed,
+				obstrTimer,
+				doorTimer,
+			)
 
 		/*
 		 * Handle incomming UDP messages
