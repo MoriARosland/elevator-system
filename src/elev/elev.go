@@ -179,6 +179,29 @@ func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
 	}
 }
 
+func OnDoorObstr(
+	elevState *types.ElevState,
+	isObstructed bool,
+	obstrTimer chan types.TimerActions,
+	doorTimer chan types.TimerActions,
+) *types.ElevState {
+
+	if elevState.DoorObstr == isObstructed {
+		return elevState
+	}
+
+	if isObstructed {
+		obstrTimer <- types.START
+	} else {
+		obstrTimer <- types.STOP
+	}
+
+	doorTimer <- types.START
+	elevState.DoorObstr = isObstructed
+
+	return elevState
+}
+
 func OnOrderChanged(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
