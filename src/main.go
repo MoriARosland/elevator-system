@@ -15,6 +15,7 @@ const NUM_FLOORS = 6
 
 const DOOR_OPEN_DURATION = 3000
 const DOOR_OBSTR_TIMEOUT = 6000
+const FLOOR_ARRIVAL_TIMEOUT = 6000
 
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
@@ -98,19 +99,21 @@ func main() {
 	printNextNode(elevState, elevConfig)
 
 	/*
+	 * Setup timers
+	 */
+	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
+	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
+	floorTimeout, floorTimer := timer.New(FLOOR_ARRIVAL_TIMEOUT * time.Millisecond)
+
+	/*
 	 * In case we start between two floors
 	 */
 	if 0 > elevio.GetFloor() {
 		elevio.SetMotorDirection(elevio.MD_Down)
 		elevState.Dirn = elevio.MD_Down
 		fsm.OnInitBetweenFloors()
+		floorTimer <- types.START
 	}
-
-	/*
-	 * Setup timers
-	 */
-	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
-	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
 
 	/*
 	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
@@ -186,8 +189,13 @@ func main() {
 		 * Handle floor arrivals
 		 */
 		case newCurrentFloor := <-drvFloors:
+			oldFloor := elevState.Floor
+
 			elevState.Floor = newCurrentFloor
 			elevio.SetFloorIndicator(newCurrentFloor)
+
+			floorTimer <- types.STOP
+			elevState.StuckBetweenFloors = false
 
 			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
 
@@ -197,7 +205,12 @@ func main() {
 				fsmOutput,
 				sendSecureMsg,
 				doorTimer,
+				floorTimer,
 			)
+
+			if !fsmOutput.SetMotor && oldFloor != -1 {
+				floorTimer <- types.START
+			}
 
 		/*
 		 * Handle door obstructions
@@ -243,7 +256,7 @@ func main() {
 					continue
 				}
 
-				if !elevState.DoorObstr {
+				if !elevState.DoorObstr || !elevState.StuckBetweenFloors {
 					bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
 						elevState,
 						elevConfig,
@@ -327,6 +340,7 @@ func main() {
 					fsmOutput,
 					sendSecureMsg,
 					doorTimer,
+					floorTimer,
 				)
 
 				continue
@@ -381,6 +395,7 @@ func main() {
 					fsmOutput,
 					sendSecureMsg,
 					doorTimer,
+					floorTimer,
 				)
 			}
 
@@ -409,6 +424,7 @@ func main() {
 				fsmOutput,
 				sendSecureMsg,
 				doorTimer,
+				floorTimer,
 			)
 
 		/*
@@ -421,6 +437,14 @@ func main() {
 				elevState,
 				elevConfig,
 				elevConfig.NodeID,
+				sendSecureMsg,
+			)
+
+		case <-floorTimeout:
+			elevState.StuckBetweenFloors = true
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
 				sendSecureMsg,
 			)
 
