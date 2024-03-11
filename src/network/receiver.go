@@ -58,3 +58,17 @@ func ListenForMessages(
 		}
 	}
 }
+
+func InitReceiver(port int) (chan []byte, chan bool) {
+	incomingMessageChannel := make(chan []byte)
+	disableListen := make(chan bool)
+
+	go ListenForMessages(
+		LocalIP(),
+		port,
+		incomingMessageChannel,
+		disableListen,
+	)
+
+	return incomingMessageChannel, disableListen
+}

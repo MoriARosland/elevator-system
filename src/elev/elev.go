@@ -4,7 +4,6 @@ import (
 	"Driver-go/elevio"
 	"elevator/network"
 	"elevator/types"
-	"errors"
 	"fmt"
 )
 
@@ -15,10 +14,10 @@ func InitConfig(
 	numButtons int,
 	doorOpenDuration int,
 	basePort int,
-) (*types.ElevConfig, error) {
+) *types.ElevConfig {
 
 	if nodeID+1 > numNodes {
-		return nil, errors.New("node id greater than number of nodes")
+		panic("Node id greater than number of nodes")
 	}
 
 	elevator := types.ElevConfig{
@@ -30,7 +29,7 @@ func InitConfig(
 		BroadcastPort:    basePort + nodeID,
 	}
 
-	return &elevator, nil
+	return &elevator
 }
 
 func InitState(elevConfig *types.ElevConfig) *types.ElevState {
@@ -147,18 +146,6 @@ func InitDriver(
 	SetHallLights(elevState.Orders, elevConfig)
 
 	return drvButtons, drvFloors, drvObstr
-}
-
-func FindNextNodeID(elevConfig *types.ElevConfig) int {
-	var nextNodeID int
-
-	if elevConfig.NodeID+1 >= elevConfig.NumNodes {
-		nextNodeID = 0
-	} else {
-		nextNodeID = elevConfig.NodeID + 1
-	}
-
-	return nextNodeID
 }
 
 func SetHallLights(orders [][][]bool, elevConfig *types.ElevConfig) {

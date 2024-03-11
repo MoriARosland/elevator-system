@@ -187,3 +187,23 @@ func calcNextNodeID(elevConfig *types.ElevConfig, nodeID int) int {
 
 	return nextNodeID
 }
+
+func InitWatchdog(elevConfig *types.ElevConfig) (chan types.NextNode, chan int, chan int) {
+	updateNextNode := make(chan types.NextNode)
+	nextNodeRevived := make(chan int)
+	nextNodeDied := make(chan int)
+
+	go MonitorNextNode(
+		elevConfig,
+		calcNextNodeID(elevConfig, elevConfig.NodeID),
+
+		updateNextNode,
+		nextNodeRevived,
+		nextNodeDied,
+
+		make(chan bool),
+		make(chan bool),
+	)
+
+	return updateNextNode, nextNodeRevived, nextNodeDied
+}

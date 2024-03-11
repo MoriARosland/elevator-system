@@ -20,10 +20,7 @@ const FLOOR_ARRIVAL_TIMEOUT = 6000
 func main() {
 	nodeID, numNodes, baseBroadcastPort, elevServerPort := parseCommandlineFlags()
 
-	/*
-	 * Initiate elevator config
-	 */
-	elevConfig, err := elev.InitConfig(
+	elevConfig := elev.InitConfig(
 		nodeID,
 		numNodes,
 		NUM_FLOORS,
@@ -32,66 +29,14 @@ func main() {
 		baseBroadcastPort,
 	)
 
-	if err != nil {
-		panic(err)
-	}
-
-	/*
-	 * Initiate elevator state
-	 */
 	elevState := elev.InitState(elevConfig)
 
-	/*
-	 * Continuously listen for messages from previous node
-	 */
-	incomingMessageChannel := make(chan []byte)
-	disableListen := make(chan bool)
+	incomingMessageChannel, disableListen := network.InitReceiver(elevConfig.BroadcastPort)
 
-	go network.ListenForMessages(
-		network.LocalIP(),
-		elevConfig.BroadcastPort,
-		incomingMessageChannel,
-		disableListen,
-	)
+	updateNextNode, nextNodeRevived, nextNodeDied := network.InitWatchdog(elevConfig)
 
-	/*
-	 * Monitor next nodes and update NextNode in elevState
-	 * Makes sure we always know which node to send messages to
-	 */
-	updateNextNode := make(chan types.NextNode)
-	nextNodeRevived := make(chan int)
-	nextNodeDied := make(chan int)
+	updateNextNodeAddr, replyReceived, sendSecureMsg, disableSecureSend := network.InitSecureSend()
 
-	go network.MonitorNextNode(
-		elevConfig,
-		elev.FindNextNodeID(elevConfig),
-
-		updateNextNode,
-		nextNodeRevived,
-		nextNodeDied,
-
-		make(chan bool),
-		make(chan bool),
-	)
-
-	/*
-	 * Setup secure message sending
-	 */
-	updateNextNodeAddr := make(chan string)
-	replyReceived := make(chan types.Header)
-	sendSecureMsg := make(chan []byte)
-	disableSecureSend := make(chan bool)
-
-	go network.SecureSend(
-		updateNextNodeAddr,
-		replyReceived,
-		sendSecureMsg,
-		disableSecureSend,
-	)
-
-	/*
-	 * Initiate elevator driver
-	 */
 	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevState, elevConfig, elevServerPort)
 
 	/*
@@ -99,7 +44,6 @@ func main() {
 	 */
 	elevState.NextNode = <-updateNextNode
 	updateNextNodeAddr <- elevState.NextNode.Addr
-
 	printNextNode(elevState, elevConfig)
 
 	/*
@@ -130,7 +74,6 @@ func main() {
 	 */
 	for {
 		select {
-
 		/*
 		 * Handle new next node
 		 */
@@ -164,17 +107,7 @@ func main() {
 		 */
 		case disconnected := <-networkStatus:
 			if !disconnected {
-				go network.MonitorNextNode(
-					elevConfig,
-					elev.FindNextNodeID(elevConfig),
-
-					updateNextNode,
-					nextNodeRevived,
-					nextNodeDied,
-
-					make(chan bool),
-					make(chan bool),
-				)
+				updateNextNode, nextNodeRevived, nextNodeDied = network.InitWatchdog(elevConfig)
 
 				/*
 				 * Wait until we know the status of the other nodes in the circle
@@ -218,6 +151,7 @@ func main() {
 						floorTimer,
 					)
 				}
+
 				continue
 			}
 
