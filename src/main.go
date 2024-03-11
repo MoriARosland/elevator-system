@@ -114,7 +114,7 @@ func main() {
 			 */
 			if elevState.Disconnected {
 				if newOrder.Button == elevio.BT_Cab {
-					elevState = elev.OnOrderChanged(
+					elevState = elev.SetOrderStatus(
 						elevState,
 						elevConfig,
 						elevConfig.NodeID,
@@ -124,7 +124,7 @@ func main() {
 
 					fsmOutput := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
 
-					elevState = elev.UpdateState(
+					elevState = elev.SetState(
 						elevState,
 						elevConfig,
 						fsmOutput,
@@ -176,7 +176,7 @@ func main() {
 
 			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
 
-			elevState = elev.UpdateState(
+			elevState = elev.SetState(
 				elevState,
 				elevConfig,
 				fsmOutput,
@@ -266,7 +266,7 @@ func main() {
 					continue
 				}
 
-				elevState = elev.OnOrderChanged(
+				elevState = elev.SetOrderStatus(
 					elevState,
 					elevConfig,
 					assignMsg.NewAssignee,
@@ -278,7 +278,7 @@ func main() {
 				 * In case of an order reassign
 				 */
 				if assignMsg.OldAssignee != int(types.UNASSIGNED) {
-					elevState = elev.OnOrderChanged(
+					elevState = elev.SetOrderStatus(
 						elevState,
 						elevConfig,
 						assignMsg.OldAssignee,
@@ -305,7 +305,7 @@ func main() {
 					elevConfig,
 				)
 
-				elevState = elev.UpdateState(
+				elevState = elev.SetState(
 					elevState,
 					elevConfig,
 					fsmOutput,
@@ -326,7 +326,7 @@ func main() {
 					continue
 				}
 
-				elevState = elev.OnOrderChanged(
+				elevState = elev.SetOrderStatus(
 					elevState,
 					elevConfig,
 					header.AuthorID,
@@ -355,7 +355,7 @@ func main() {
 				if isTarget && elevState.Dirn == elevio.MD_Stop {
 					fsmOutput := fsm.OnSync(elevState, elevConfig)
 
-					elevState = elev.UpdateState(
+					elevState = elev.SetState(
 						elevState,
 						elevConfig,
 						fsmOutput,
@@ -387,7 +387,7 @@ func main() {
 
 			fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
 
-			elevState = elev.UpdateState(
+			elevState = elev.SetState(
 				elevState,
 				elevConfig,
 				fsmOutput,
