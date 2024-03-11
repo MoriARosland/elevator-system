@@ -31,7 +31,7 @@ func main() {
 
 	elevState := elev.InitState(elevConfig)
 
-	incomingMessageChannel, disableListen := network.InitReceiver(elevConfig.BroadcastPort)
+	incomingMessage, disableListen := network.InitReceiver(elevConfig.BroadcastPort)
 
 	updateNextNode, nextNodeRevived, nextNodeDied := network.InitWatchdog(elevConfig)
 
@@ -145,7 +145,7 @@ func main() {
 		/*
 		 * Handle incomming UDP messages
 		 */
-		case encodedMsg := <-incomingMessageChannel:
+		case encodedMsg := <-incomingMessage:
 			header, err := network.GetMsgHeader(encodedMsg)
 
 			if err != nil {
