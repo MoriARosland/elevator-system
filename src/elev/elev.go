@@ -91,7 +91,22 @@ func UpdateState(
 	 * Clear served orders
 	 */
 	for order, clearOrder := range stateChanges.ClearOrders {
-		if clearOrder {
+		if !clearOrder {
+			continue
+		}
+
+		if newState.Disconnected {
+			newState = *OnOrderChanged(
+				&newState,
+				elevConfig,
+				elevConfig.NodeID,
+				types.Order{
+					Button: elevio.ButtonType(order),
+					Floor:  newState.Floor,
+				},
+				false,
+			)
+		} else {
 			sendSecureMsg <- network.FormatServedMsg(
 				types.Order{
 					Button: elevio.ButtonType(order),

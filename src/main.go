@@ -13,6 +13,7 @@ import (
 
 const NUM_BUTTONS = 3
 const NUM_FLOORS = 4
+
 const DOOR_OPEN_DURATION = 3000
 const DOOR_OBSTR_TIMEOUT = 6000
 const FLOOR_ARRIVAL_TIMEOUT = 6000
@@ -45,13 +46,13 @@ func main() {
 	 * Continuously listen for messages from previous node
 	 */
 	incomingMessageChannel := make(chan []byte)
-	listenFunctionDisconnectedChannel := make(chan bool)
+	listenDisconnectedChannel := make(chan bool)
 
 	go network.ListenForMessages(
 		network.LocalIP(),
 		elevConfig.BroadcastPort,
 		incomingMessageChannel,
-		listenFunctionDisconnectedChannel,
+		listenDisconnectedChannel,
 	)
 
 	/*
@@ -82,13 +83,13 @@ func main() {
 	updateNextNodeAddr := make(chan string)
 	replyReceived := make(chan types.Header)
 	sendSecureMsg := make(chan []byte)
-	sendFunctionDisconnectChannel := make(chan bool)
+	sendDisconnectChannel := make(chan bool)
 
 	go network.SecureSend(
 		updateNextNodeAddr,
 		replyReceived,
 		sendSecureMsg,
-		sendFunctionDisconnectChannel,
+		sendDisconnectChannel,
 	)
 
 	/*
@@ -124,8 +125,8 @@ func main() {
 	/*
 	 * Start "I'm alive" broadcasting, notifies the other nodes that we are ready
 	 */
-	networkDisconnectedChannel := make(chan bool)
-	go network.Broadcast(elevConfig.BroadcastPort, networkDisconnectedChannel)
+	broadcastDisconnectedChannel := make(chan bool)
+	go network.Broadcast(elevConfig.BroadcastPort, broadcastDisconnectedChannel)
 
 	/*
 	 * Main for/select
@@ -159,19 +160,22 @@ func main() {
 		/*
 		 * Update elevators disconnect state
 		 */
-		case networkDisconnected := <-networkDisconnectedChannel:
+		case networkDisconnected := <-broadcastDisconnectedChannel:
 
 			if networkDisconnected {
+
 				destoryWatchdog <- true
 				<-terminationComplete
-				fmt.Println("killed the dog")
+
 			} else {
+
 				go network.MonitorNextNode(
 					elevConfig,
 					elev.FindNextNodeID(elevConfig),
 
 					updateNextNode,
 					syncNextNode,
+					reassignOrders,
 
 					terminationComplete,
 					destoryWatchdog,
@@ -183,16 +187,16 @@ func main() {
 				elevState.NextNode = <-updateNextNode
 				updateNextNodeAddr <- elevState.NextNode.Addr
 
-				// printNextNode(elevState, elevConfig)
-
-				fmt.Println("dog ressurected")
+				printNextNode(elevState, elevConfig)
 			}
 
 			elevState.Disconnected = networkDisconnected
-			fmt.Println("case main elevState.Disconnected:", elevState.Disconnected)
 
-			listenFunctionDisconnectedChannel <- networkDisconnected
-			sendFunctionDisconnectChannel <- networkDisconnected
+			fmt.Println("updated elev.State")
+			listenDisconnectedChannel <- networkDisconnected
+			sendDisconnectChannel <- networkDisconnected
+
+			fmt.Println("case main elevState.Disconnected updated to:", elevState.Disconnected)
 
 		case lostNode := <-reassignOrders:
 			elev.ReassignOrders(
@@ -206,15 +210,11 @@ func main() {
 		 * Handle button presses
 		 */
 		case newOrder := <-drvButtons:
-			fmt.Println("new button press!")
-
 			/*
 			 * If elevator is disconnected from the network it should only accept orders from its own cab
 			 */
 			if elevState.Disconnected {
 				if newOrder.Button == elevio.BT_Cab {
-					fmt.Println("accepted the cab call, even though the elevator is disconnected:")
-
 					elevState = elev.OnOrderChanged(
 						elevState,
 						elevConfig,
@@ -483,9 +483,9 @@ func main() {
 				network.Send(elevState.NextNode.Addr, encodedMsg)
 			}
 
-		/*
-		 * Handle door timeouts
-		 */
+			/*
+			 * Handle door timeouts
+			 */obstrTimer <- types.STOP
 		case <-doorTimeout:
 			if elevState.DoorObstr {
 				doorTimer <- types.START

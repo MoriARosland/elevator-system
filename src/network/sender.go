@@ -67,12 +67,7 @@ func SecureSend(
 			}
 
 		case disconnected = <-disconnectedChan:
-			fmt.Println("case: send diconnected:", disconnected)
-
-			if disconnected {
-				msgBuffer = nil
-				msgTimeOut.Stop()
-			}
+			fmt.Println("send disconnected:", disconnected)
 
 		case replyHeader := <-replyReceived:
 
@@ -113,7 +108,7 @@ func SecureSend(
 
 		case <-msgTimeOut.C:
 
-			if len(msgBuffer) > 0 {
+			if len(msgBuffer) > 0 && !disconnected {
 				Send(addr, msgBuffer[0])
 			}
 

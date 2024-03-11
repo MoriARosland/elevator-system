@@ -9,9 +9,6 @@ import (
 	"github.com/libp2p/go-reuseport"
 )
 
-const LISTEN_TIMEOUT = 300
-const BUF_SIZE = 2
-
 /*
  * Recursively monitors the other nodes.
  * The closest (forward in the circle) node that is
@@ -29,13 +26,16 @@ func MonitorNextNode(
 	selfDestruct <-chan bool,
 ) {
 
+	const BUFFER_SIZE = 2
+	const LISTEN_TIMEOUT = 300
+
 	hasSubroutine := false
 	isAlive := true
 	previouslyAlive := false
 
 	destroySubroutine := make(chan bool)
 
-	msgBuffer := make([]byte, BUF_SIZE)
+	msgBuffer := make([]byte, BUFFER_SIZE)
 
 	basePort := elevConfig.BroadcastPort - elevConfig.NodeID
 	nextNodePort := basePort + nextNodeID
@@ -100,8 +100,6 @@ func MonitorNextNode(
 				continue
 			}
 
-			isAlive = false
-
 			/*
 			 * Error is not a timeout error
 			 */
@@ -120,19 +118,26 @@ func MonitorNextNode(
 
 			if previouslyAlive {
 				nodeDied <- nextNodeID
+
 				previouslyAlive = false
 			}
 
-			/*
-			 * There are no other nodes alive
-			 */
 			if nextNodeID == calcPrevNodeID(elevConfig) {
-				updateNextNode <- types.NextNode{
-					ID:   -1,
-					Addr: "",
+				/*
+				 * There are no other nodes alive
+				 */
+				if isAlive {
+					updateNextNode <- types.NextNode{
+						ID:   -1,
+						Addr: "",
+					}
 				}
+
+				isAlive = false
 				continue
 			}
+
+			isAlive = false
 
 			/*
 			 * If we have not come full circle:
