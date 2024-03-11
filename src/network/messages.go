@@ -102,15 +102,14 @@ func FormatBidMsg(
 	return msg.ToJson()
 }
 
-func FormatSyncMsg(targetID int, orders [][][]bool, author int) []byte {
+func FormatSyncMsg(orders [][][]bool, author int) []byte {
 	msg := types.Msg[types.Sync]{
 		Header: types.Header{
 			Type:     types.SYNC,
 			AuthorID: author,
 		},
 		Content: types.Sync{
-			Orders:   orders,
-			TargetID: targetID,
+			Orders: orders,
 		},
 	}
 
