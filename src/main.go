@@ -57,7 +57,7 @@ func main() {
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-	syncNextNode := make(chan bool)
+	nextNodeRevived := make(chan bool)
 	reassignOrders := make(chan int)
 
 	go network.MonitorNextNode(
@@ -65,7 +65,7 @@ func main() {
 		elev.FindNextNodeID(elevConfig),
 
 		updateNextNode,
-		syncNextNode,
+		nextNodeRevived,
 		reassignOrders,
 
 		make(chan bool),
@@ -141,7 +141,7 @@ func main() {
 		/*
 		 * Sync new next node
 		 */
-		case <-syncNextNode:
+		case <-nextNodeRevived:
 			sendSecureMsg <- network.FormatSyncMsg(
 				elevState.Orders,
 				elevConfig.NodeID,
