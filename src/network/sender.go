@@ -46,18 +46,20 @@ func SecureSend(
 	updateAddr <-chan string,
 	replyReceived <-chan types.Header,
 	msgChan <-chan []byte,
-	disconnectedChan <-chan bool,
+	disableSecureSend <-chan bool,
 ) {
 
 	var addr string
 	var msgBuffer [][]byte
-	var disconnected bool
+	var disabled bool
 
 	msgTimeOut := time.NewTicker(MSG_TIMEOUT * time.Millisecond)
 	msgTimeOut.Stop()
 
 	for {
 		select {
+		case disabled = <-disableSecureSend:
+
 		case newAddr := <-updateAddr:
 			addr = newAddr
 
@@ -66,10 +68,7 @@ func SecureSend(
 				msgTimeOut.Stop()
 			}
 
-		case disconnected = <-disconnectedChan:
-
 		case replyHeader := <-replyReceived:
-
 			if len(msgBuffer) == 0 {
 				continue
 			}
@@ -93,8 +92,7 @@ func SecureSend(
 			msgTimeOut.Reset(MSG_TIMEOUT * time.Millisecond)
 
 		case msg := <-msgChan:
-
-			if disconnected {
+			if disabled {
 				continue
 			}
 
@@ -106,15 +104,11 @@ func SecureSend(
 			}
 
 		case <-msgTimeOut.C:
-
-			if len(msgBuffer) > 0 && !disconnected {
+			if len(msgBuffer) > 0 && !disabled {
 				Send(addr, msgBuffer[0])
 			}
 
 		default:
-			/*
-			 * Do nothing
-			 */
 			continue
 		}
 	}

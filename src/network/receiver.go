@@ -13,8 +13,8 @@ import (
 func ListenForMessages(
 	ip string,
 	port int,
-	messageChannel chan<- []byte,
-	disconnectedChannel chan bool,
+	outgoingMessage chan<- []byte,
+	disableListen chan bool,
 ) {
 
 	const BUFFER_SIZE = 1024
@@ -30,14 +30,14 @@ func ListenForMessages(
 
 	buffer := make([]byte, BUFFER_SIZE)
 
-	var disconnected bool
+	var disabled bool
 
 	for {
 		select {
-		case disconnected = <-disconnectedChannel:
+		case disabled = <-disableListen:
 
 		default:
-			if disconnected {
+			if disabled {
 				continue
 			}
 
@@ -54,7 +54,7 @@ func ListenForMessages(
 				continue
 			}
 
-			messageChannel <- buffer[:n]
+			outgoingMessage <- buffer[:n]
 		}
 	}
 }
