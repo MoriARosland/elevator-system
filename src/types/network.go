@@ -40,7 +40,8 @@ type Served struct {
 }
 
 type Sync struct {
-	Orders [][][]bool
+	Orders   [][][]bool
+	TargetID int
 }
 
 /*

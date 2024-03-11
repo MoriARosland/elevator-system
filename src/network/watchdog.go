@@ -19,7 +19,7 @@ func MonitorNextNode(
 	nextNodeID int,
 
 	updateNextNode chan<- types.NextNode,
-	nodeRevived chan<- bool,
+	nodeRevived chan<- int,
 	nodeDied chan<- int,
 
 	terminationComplete chan bool,
@@ -86,13 +86,15 @@ func MonitorNextNode(
 					hasSubroutine = false
 				}
 
-				updateNextNode <- types.NextNode{
-					ID:   nextNodeID,
-					Addr: addr.String(),
+				if !previouslyAlive {
+					updateNextNode <- types.NextNode{
+						ID:   nextNodeID,
+						Addr: addr.String(),
+					}
 				}
 
 				if !isAlive {
-					nodeRevived <- true
+					nodeRevived <- nextNodeID
 				}
 
 				isAlive = true
@@ -105,7 +107,9 @@ func MonitorNextNode(
 			 */
 			nErr, ok := err.(net.Error)
 			if !ok || !nErr.Timeout() {
-				continue
+				destroySubroutine <- true
+				<-terminationComplete
+				return
 			}
 
 			/*

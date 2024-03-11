@@ -23,7 +23,7 @@ func ListenForMessages(
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf("%s:%d", ip, port))
 
 	if err != nil {
-		panic(err)
+		panic("Could not connect to network")
 	}
 
 	defer packetConnection.Close()
@@ -35,7 +35,6 @@ func ListenForMessages(
 	for {
 		select {
 		case disconnected = <-disconnectedChannel:
-			fmt.Println("listen disconnect: ", disconnected)
 
 		default:
 			if disconnected {

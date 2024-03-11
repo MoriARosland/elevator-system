@@ -18,14 +18,14 @@ func Broadcast(port int, networkDisconnectChannel chan bool) {
 	packetConnection, err := reuseport.ListenPacket("udp4", fmt.Sprintf(":%d", port))
 
 	if err != nil {
-		panic(err)
+		panic("Could not connect to network")
 	}
 	defer packetConnection.Close()
 
 	addr, err := net.ResolveUDPAddr("udp4", fmt.Sprintf("%s:%d", BROADCAST_IP, port))
 
 	if err != nil {
-		panic(err)
+		panic("Could not resolve address")
 	}
 
 	disconnected := false
@@ -43,8 +43,6 @@ func Broadcast(port int, networkDisconnectChannel chan bool) {
 		}
 
 		if disconnected != oldDisconnected {
-			fmt.Println("broadcast diconnected:", disconnected)
-
 			networkDisconnectChannel <- disconnected
 			oldDisconnected = disconnected
 		}

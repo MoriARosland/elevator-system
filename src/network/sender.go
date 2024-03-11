@@ -67,7 +67,6 @@ func SecureSend(
 			}
 
 		case disconnected = <-disconnectedChan:
-			fmt.Println("send disconnected:", disconnected)
 
 		case replyHeader := <-replyReceived:
 

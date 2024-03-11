@@ -7,12 +7,11 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"fmt"
 	"time"
 )
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 4
+const NUM_FLOORS = 6
 
 const DOOR_OPEN_DURATION = 3000
 const DOOR_OBSTR_TIMEOUT = 6000
@@ -60,11 +59,8 @@ func main() {
 	 * Makes sure we always know which node to send messages to
 	 */
 	updateNextNode := make(chan types.NextNode)
-	nextNodeRevived := make(chan bool)
+	nextNodeRevived := make(chan int)
 	nextNodeDied := make(chan int)
-
-	terminationComplete := make(chan bool)
-	destoryWatchdog := make(chan bool)
 
 	go network.MonitorNextNode(
 		elevConfig,
@@ -74,8 +70,8 @@ func main() {
 		nextNodeRevived,
 		nextNodeDied,
 
-		terminationComplete,
-		destoryWatchdog,
+		make(chan bool),
+		make(chan bool),
 	)
 
 	/*
@@ -151,24 +147,26 @@ func main() {
 		/*
 		 * Sync new next node
 		 */
-		case <-nextNodeRevived:
+		case nodeID := <-nextNodeRevived:
 			sendSecureMsg <- network.FormatSyncMsg(
 				elevState.Orders,
+				nodeID,
 				elevConfig.NodeID,
+			)
+
+		case lostNode := <-nextNodeDied:
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				lostNode,
+				sendSecureMsg,
 			)
 
 		/*
 		 * Update elevators disconnect state
 		 */
 		case networkDisconnected := <-broadcastDisconnectedChannel:
-
-			if networkDisconnected {
-
-				destoryWatchdog <- true
-				<-terminationComplete
-
-			} else {
-
+			if !networkDisconnected {
 				go network.MonitorNextNode(
 					elevConfig,
 					elev.FindNextNodeID(elevConfig),
@@ -177,8 +175,8 @@ func main() {
 					nextNodeRevived,
 					nextNodeDied,
 
-					terminationComplete,
-					destoryWatchdog,
+					make(chan bool),
+					make(chan bool),
 				)
 
 				/*
@@ -192,19 +190,8 @@ func main() {
 
 			elevState.Disconnected = networkDisconnected
 
-			fmt.Println("updated elev.State")
 			listenDisconnectedChannel <- networkDisconnected
 			sendDisconnectChannel <- networkDisconnected
-
-			fmt.Println("case main elevState.Disconnected updated to:", elevState.Disconnected)
-
-		case lostNode := <-nextNodeDied:
-			elev.ReassignOrders(
-				elevState,
-				elevConfig,
-				lostNode,
-				sendSecureMsg,
-			)
 
 		/*
 		 * Handle button presses
@@ -456,7 +443,9 @@ func main() {
 					syncMsg.Orders,
 				)
 
-				if elevState.Dirn == elevio.MD_Stop {
+				isTarget := syncMsg.TargetID == elevConfig.NodeID
+
+				if isTarget && elevState.Dirn == elevio.MD_Stop {
 					fsmOutput := fsm.OnSync(elevState, elevConfig)
 
 					elevState = elev.UpdateState(
@@ -469,7 +458,7 @@ func main() {
 					)
 				}
 
-				encodedMsg = network.FormatSyncMsg(elevState.Orders, header.AuthorID)
+				encodedMsg = network.FormatSyncMsg(elevState.Orders, syncMsg.TargetID, header.AuthorID)
 			}
 
 			/*
@@ -479,9 +468,9 @@ func main() {
 				network.Send(elevState.NextNode.Addr, encodedMsg)
 			}
 
-			/*
-			 * Handle door timeouts
-			 */obstrTimer <- types.STOP
+		/*
+		 * Handle door timeouts
+		 */
 		case <-doorTimeout:
 			if elevState.DoorObstr {
 				doorTimer <- types.START
