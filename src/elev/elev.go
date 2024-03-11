@@ -316,12 +316,12 @@ func HandleNewOrder(
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
-	
+
 	isCabOrder := order.Button == elevio.BT_Cab
 
 	if elevState.Disconnected && isCabOrder {
 		/*
-		 * When disconnected we only handle new cab orders 
+		 * When disconnected we only handle new cab orders
 		 */
 		elevState = SelfAssignOrder(
 			elevState,
@@ -388,6 +388,34 @@ func HandleFloorArrival(
 	if !fsmOutput.SetMotor && oldFloor != -1 {
 		floorTimer <- types.START
 	}
+
+	return elevState
+}
+
+func HandleDoorTimeout(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	sendSecureMsg chan<- []byte,
+	doorTimer chan<- types.TimerActions,
+	floorTimer chan<- types.TimerActions,
+) *types.ElevState {
+
+	if elevState.DoorObstr {
+		doorTimer <- types.START
+		return elevState
+	}
+	doorTimer <- types.STOP
+
+	fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
+
+	elevState = SetState(
+		elevState,
+		elevConfig,
+		fsmOutput,
+		sendSecureMsg,
+		doorTimer,
+		floorTimer,
+	)
 
 	return elevState
 }

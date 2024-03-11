@@ -39,13 +39,6 @@ func main() {
 
 	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevState, elevConfig, elevServerPort)
 
-	/*
-	 * Wait until we know the status of the other nodes in the circle
-	 */
-	elevState.NextNode = <-updateNextNode
-	updateSecureSendAddr <- elevState.NextNode.Addr
-	printNextNode(elevState, elevConfig)
-
 	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
 	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
 	floorTimeout, floorTimer := timer.New(FLOOR_ARRIVAL_TIMEOUT * time.Millisecond)
@@ -57,12 +50,19 @@ func main() {
 		floorTimer <- types.START
 	}
 
+	/*
+	 * Wait until we know the status of the other nodes in the circle...
+	 */
+	elevState.NextNode = <-updateNextNode
+	updateSecureSendAddr <- elevState.NextNode.Addr
+	printNextNode(elevState, elevConfig)
+
+	/*
+	 * ...before we notify the other nodes that we are ready
+	 */
 	networkStatus := make(chan bool)
 	go network.Broadcast(elevConfig.BroadcastPort, networkStatus)
 
-	/*
-	 * Main for/select
-	 */
 	for {
 		select {
 		/*
@@ -317,33 +317,17 @@ func main() {
 				network.Send(elevState.NextNode.Addr, encodedMsg)
 			}
 
-		/*
-		 * Handle door timeouts
-		 */
 		case <-doorTimeout:
-			if elevState.DoorObstr {
-				doorTimer <- types.START
-				continue
-			}
-			doorTimer <- types.STOP
-
-			fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
-
-			elevState = elev.SetState(
+			elevState = elev.HandleDoorTimeout(
 				elevState,
 				elevConfig,
-				fsmOutput,
 				sendSecureMsg,
 				doorTimer,
 				floorTimer,
 			)
 
-		/*
-		 * Reassign orders if door obstruction times out
-		 */
 		case <-obstrTimeout:
 			obstrTimer <- types.STOP
-
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
@@ -351,12 +335,8 @@ func main() {
 				sendSecureMsg,
 			)
 
-		/*
-		 * Reassign order if we are stuck between floors
-		 */
 		case <-floorTimeout:
 			elevState.StuckBetweenFloors = true
-
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
