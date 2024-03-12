@@ -4,11 +4,6 @@ import "Driver-go/elevio"
 
 type Order = elevio.ButtonEvent
 
-type NextNode struct {
-	ID   int
-	Addr string
-}
-
 type ElevConfig struct {
 	NodeID           int
 	NumNodes         int
@@ -24,6 +19,6 @@ type ElevState struct {
 	StuckBetweenFloors bool
 	DoorObstr          bool
 	Orders             [][][]bool
-	NextNode           NextNode
+	NextNodeID         int
 	Disconnected       bool
 }

@@ -14,7 +14,6 @@ func InitConfig(
 	numFloors int,
 	numButtons int,
 	doorOpenDuration int,
-	basePort int,
 ) *types.ElevConfig {
 
 	if nodeID+1 > numNodes {
@@ -27,7 +26,6 @@ func InitConfig(
 		NumFloors:        numFloors,
 		NumButtons:       numButtons,
 		DoorOpenDuration: doorOpenDuration,
-		BroadcastPort:    basePort + nodeID,
 	}
 
 	return &elevator
@@ -59,7 +57,7 @@ func SetState(
 	oldState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	stateChanges types.FsmOutput,
-	sendSecureMsg chan<- []byte,
+	servedTx chan types.Msg[types.Served],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -83,7 +81,6 @@ func SetState(
 		Dirn:         stateChanges.ElevDirn,
 		DoorObstr:    oldState.DoorObstr,
 		Orders:       oldState.Orders,
-		NextNode:     oldState.NextNode,
 		Disconnected: oldState.Disconnected,
 	}
 
@@ -107,11 +104,12 @@ func SetState(
 				false,
 			)
 		} else {
-			sendSecureMsg <- network.FormatServedMsg(
+			servedTx <- network.FormatServedMsg(
 				types.Order{
 					Button: elevio.ButtonType(order),
 					Floor:  newState.Floor,
 				},
+				newState.NextNodeID,
 				elevConfig.NodeID,
 			)
 		}
@@ -253,7 +251,7 @@ func ReassignOrders(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	nodeID int,
-	sendSecureMsg chan<- []byte,
+	bidTx chan types.Msg[types.Bid],
 ) {
 
 	for floor := range elevState.Orders[nodeID] {
@@ -267,11 +265,12 @@ func ReassignOrders(
 				Floor:  floor,
 			}
 
-			sendSecureMsg <- network.FormatBidMsg(
+			bidTx <- network.FormatBidMsg(
 				nil,
 				order,
 				nodeID,
 				elevConfig.NumNodes,
+				elevState.NextNodeID,
 				elevConfig.NodeID,
 			)
 		}
@@ -282,7 +281,7 @@ func SelfAssignOrder(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	order types.Order,
-	sendSecureMsg chan<- []byte,
+	servedTx chan types.Msg[types.Served],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -300,7 +299,7 @@ func SelfAssignOrder(
 		elevState,
 		elevConfig,
 		fsmOutput,
-		sendSecureMsg,
+		servedTx,
 		doorTimer,
 		floorTimer,
 	)
@@ -312,7 +311,9 @@ func HandleNewOrder(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	order types.Order,
-	sendSecureMsg chan<- []byte,
+	servedTx chan types.Msg[types.Served],
+	bidTx chan types.Msg[types.Bid],
+	assignTx chan types.Msg[types.Assign],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -327,7 +328,7 @@ func HandleNewOrder(
 			elevState,
 			elevConfig,
 			order,
-			sendSecureMsg,
+			servedTx,
 			doorTimer,
 			floorTimer,
 		)
@@ -335,21 +336,23 @@ func HandleNewOrder(
 		/*
 		 * Cab orders are selfassigned (over the network)
 		 */
-		sendSecureMsg <- network.FormatAssignMsg(
+		assignTx <- network.FormatAssignMsg(
 			order,
 			elevConfig.NodeID,
 			int(types.UNASSIGNED),
+			elevState.NextNodeID,
 			elevConfig.NodeID,
 		)
 	} else {
 		/*
 		 * Hall orders are assigned after a bidding round
 		 */
-		sendSecureMsg <- network.FormatBidMsg(
+		bidTx <- network.FormatBidMsg(
 			nil,
 			order,
 			int(types.UNASSIGNED),
 			elevConfig.NumNodes,
+			elevState.NextNodeID,
 			elevConfig.NodeID,
 		)
 	}
@@ -361,7 +364,7 @@ func HandleFloorArrival(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	newFloor int,
-	sendSecureMsg chan<- []byte,
+	servedTx chan types.Msg[types.Served],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -380,7 +383,7 @@ func HandleFloorArrival(
 		elevState,
 		elevConfig,
 		fsmOutput,
-		sendSecureMsg,
+		servedTx,
 		doorTimer,
 		floorTimer,
 	)
@@ -395,7 +398,7 @@ func HandleFloorArrival(
 func HandleDoorTimeout(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
-	sendSecureMsg chan<- []byte,
+	servedTx chan types.Msg[types.Served],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -412,7 +415,7 @@ func HandleDoorTimeout(
 		elevState,
 		elevConfig,
 		fsmOutput,
-		sendSecureMsg,
+		servedTx,
 		doorTimer,
 		floorTimer,
 	)

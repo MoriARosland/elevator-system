@@ -2,50 +2,20 @@ package network
 
 import (
 	"elevator/types"
-	"encoding/json"
 )
-
-const SIZE_OF_HEADER = 23
-
-func GetMsgHeader(encodedMsg []byte) (*types.Header, error) {
-	var header types.Header
-
-	encodedHeader := encodedMsg[:SIZE_OF_HEADER]
-
-	err := json.Unmarshal(encodedHeader, &header)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &header, nil
-}
-
-func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
-	var content T
-
-	encodedHeader := encodedMsg[SIZE_OF_HEADER:]
-
-	err := json.Unmarshal(encodedHeader, &content)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &content, nil
-}
 
 func FormatAssignMsg(
 	order types.Order,
 	newAssignee int,
 	oldAssignee int,
+	recipient int,
 	author int,
-) []byte {
+) types.Msg[types.Assign] {
 
 	msg := types.Msg[types.Assign]{
 		Header: types.Header{
-			Type:     types.ASSIGN,
-			AuthorID: author,
+			AuthorID:  author,
+			Recipient: recipient,
 		},
 		Content: types.Assign{
 			Order:       order,
@@ -54,21 +24,26 @@ func FormatAssignMsg(
 		},
 	}
 
-	return msg.ToJson()
+	return msg
 }
 
-func FormatServedMsg(order types.Order, author int) []byte {
+func FormatServedMsg(
+	order types.Order,
+	recipient int,
+	author int,
+) types.Msg[types.Served] {
+
 	msg := types.Msg[types.Served]{
 		Header: types.Header{
-			Type:     types.SERVED,
-			AuthorID: author,
+			AuthorID:  author,
+			Recipient: recipient,
 		},
 		Content: types.Served{
 			Order: order,
 		},
 	}
 
-	return msg.ToJson()
+	return msg
 }
 
 func FormatBidMsg(
@@ -76,8 +51,9 @@ func FormatBidMsg(
 	order types.Order,
 	oldAssignee int,
 	NumNodes int,
+	recipient int,
 	author int,
-) []byte {
+) types.Msg[types.Bid] {
 
 	if len(timeToServed) == 0 {
 		timeToServed = make([]int, NumNodes)
@@ -89,8 +65,8 @@ func FormatBidMsg(
 
 	msg := types.Msg[types.Bid]{
 		Header: types.Header{
-			Type:     types.BID,
-			AuthorID: author,
+			AuthorID:  author,
+			Recipient: recipient,
 		},
 		Content: types.Bid{
 			Order:        order,
@@ -99,14 +75,20 @@ func FormatBidMsg(
 		},
 	}
 
-	return msg.ToJson()
+	return msg
 }
 
-func FormatSyncMsg(orders [][][]bool, targetID int, author int) []byte {
+func FormatSyncMsg(
+	orders [][][]bool,
+	targetID int,
+	recipient int,
+	author int,
+) types.Msg[types.Sync] {
+
 	msg := types.Msg[types.Sync]{
 		Header: types.Header{
-			Type:     types.SYNC,
-			AuthorID: author,
+			AuthorID:  author,
+			Recipient: recipient,
 		},
 		Content: types.Sync{
 			Orders:   orders,
@@ -114,5 +96,5 @@ func FormatSyncMsg(orders [][][]bool, targetID int, author int) []byte {
 		},
 	}
 
-	return msg.ToJson()
+	return msg
 }
