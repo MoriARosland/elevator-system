@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"slices"
 )
 
 /*
@@ -27,16 +28,16 @@ func parseCommandlineFlags() (int, int, int) {
 /*
  * Find the index of the lowest value that is not -1
  */
-// func minTimeToServed(timeToServed []int) int {
-// 	result := slices.Max(timeToServed)
+func minTimeToServed(timeToServed []int) int {
+	result := slices.Max(timeToServed)
 
-// 	for _, value := range timeToServed {
-// 		if 0 > value {
-// 			continue
-// 		} else if value < result {
-// 			result = value
-// 		}
-// 	}
+	for _, value := range timeToServed {
+		if 0 > value {
+			continue
+		} else if value < result {
+			result = value
+		}
+	}
 
-// 	return slices.Index(timeToServed, result)
-// }
+	return slices.Index(timeToServed, result)
+}

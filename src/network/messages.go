@@ -4,6 +4,38 @@ import (
 	"elevator/types"
 )
 
+func FormatBidMsg(
+	timeToServed []int,
+	order types.Order,
+	oldAssignee int,
+	NumNodes int,
+	recipient int,
+	author int,
+) types.Msg[types.Bid] {
+
+	if len(timeToServed) == 0 {
+		timeToServed = make([]int, NumNodes)
+
+		for NodeID := range timeToServed {
+			timeToServed[NodeID] = -1
+		}
+	}
+
+	msg := types.Msg[types.Bid]{
+		Header: types.Header{
+			AuthorID:  author,
+			Recipient: recipient,
+		},
+		Content: types.Bid{
+			Order:        order,
+			TimeToServed: timeToServed,
+			OldAssignee:  oldAssignee,
+		},
+	}
+
+	return msg
+}
+
 func FormatAssignMsg(
 	order types.Order,
 	newAssignee int,
@@ -40,38 +72,6 @@ func FormatServedMsg(
 		},
 		Content: types.Served{
 			Order: order,
-		},
-	}
-
-	return msg
-}
-
-func FormatBidMsg(
-	timeToServed []int,
-	order types.Order,
-	oldAssignee int,
-	NumNodes int,
-	recipient int,
-	author int,
-) types.Msg[types.Bid] {
-
-	if len(timeToServed) == 0 {
-		timeToServed = make([]int, NumNodes)
-
-		for NodeID := range timeToServed {
-			timeToServed[NodeID] = -1
-		}
-	}
-
-	msg := types.Msg[types.Bid]{
-		Header: types.Header{
-			AuthorID:  author,
-			Recipient: recipient,
-		},
-		Content: types.Bid{
-			Order:        order,
-			TimeToServed: timeToServed,
-			OldAssignee:  oldAssignee,
 		},
 	}
 

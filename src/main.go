@@ -6,6 +6,7 @@ import (
 	"Network-go/peers"
 	"elevator/elev"
 	"elevator/fsm"
+	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
 	"fmt"
@@ -57,18 +58,24 @@ func main() {
 
 	bidTx := make(chan types.Msg[types.Bid])
 	bidRx := make(chan types.Msg[types.Bid])
+	bidTxSecure := make(chan types.Msg[types.Bid])
 
 	assignTx := make(chan types.Msg[types.Assign])
 	assignRx := make(chan types.Msg[types.Assign])
+	assignTxSecure := make(chan types.Msg[types.Assign])
 
 	servedTx := make(chan types.Msg[types.Served])
 	servedRx := make(chan types.Msg[types.Served])
+	servedTxSecure := make(chan types.Msg[types.Served])
 
 	syncTx := make(chan types.Msg[types.Sync])
 	syncRx := make(chan types.Msg[types.Sync])
+	syncTxSecure := make(chan types.Msg[types.Sync])
 
 	go bcast.Transmitter(BCAST_PORT, bidTx, assignTx, servedTx, syncTx)
 	go bcast.Receiver(BCAST_PORT, bidRx, assignRx, servedRx, syncRx)
+
+	replyReceived := make(chan types.Header)
 
 	for {
 		select {
@@ -144,10 +151,99 @@ func main() {
 				continue
 			}
 
+			isReply := bid.Header.AuthorID == elevConfig.NodeI
+
+			if !elevState.DoorObstr && !elevState.StuckBetweenFloors {
+				bid.Content.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
+					elevState,
+					elevConfig,
+					bid.Content.Order,
+				)
+			}
+
+			if isReply {
+				assignee := minTimeToServed(bid.Content.TimeToServed)
+
+				assignTxSecure <- network.FormatAssignMsg(
+					bid.Content.Order,
+					assignee,
+					bid.Content.OldAssignee,
+					elevState.NextNodeID,
+					elevConfig.NodeID,
+				)
+
+				continue
+			}
+
+			bidTx <- network.FormatBidMsg(
+				bid.Content.TimeToServed,
+				bid.Content.Order,
+				bid.Content.OldAssignee,
+				elevConfig.NumNodes,
+				elevState.NextNodeID,
+				bid.Header.AuthorID,
+			)
+
 		case assign := <-assignRx:
 			if assign.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
+
+			if assign.Content.OldAssignee != int(types.UNASSIGNED) {
+				elevState = elev.SetOrderStatus(
+					elevState,
+					elevConfig,
+					assign.Content.OldAssignee,
+					assign.Content.Order,
+					false,
+				)
+			}
+
+			elevState = elev.SetOrderStatus(
+				elevState,
+				elevConfig,
+				assign.Content.OldAssignee,
+				assign.Content.Order,
+				true,
+			)
+
+			/*
+			* Make sure that the message is forwarded before updating
+			* state in case the order is to be cleared immediately
+			 */
+
+			isReply := assign.Header.AuthorID == elevConfig.NodeID
+
+			if !isReply {
+				assignTx <- network.FormatAssignMsg(
+					assign.Content.Order,
+					assign.Content.NewAssignee,
+					assign.Content.OldAssignee,
+					elevState.NextNodeID,
+					assign.Header.AuthorID,
+				)
+			}
+
+			if assignMsg.NewAssignee != elevConfig.NodeID {
+				continue
+			}
+
+			fsmOutput := fsm.OnOrderAssigned(
+				assignMsg.Order,
+				elevState,
+				elevConfig,
+			)
+
+			elevState = elev.SetState(
+				elevState,
+				elevConfig,
+				fsmOutput,
+				sendSecureMsg,
+				doorTimer,
+				floorTimer,
+			)
+
+			continue
 
 		case served := <-servedRx:
 			if served.Header.Recipient != elevConfig.NodeID {
