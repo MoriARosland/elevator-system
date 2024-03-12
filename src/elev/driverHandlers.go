@@ -12,6 +12,7 @@ func HandleNewOrder(
 	elevConfig *types.ElevConfig,
 	order types.Order,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	bidTx chan types.Msg[types.Bid],
 	assignTx chan types.Msg[types.Assign],
 	doorTimer chan<- types.TimerActions,
@@ -29,6 +30,7 @@ func HandleNewOrder(
 			elevConfig,
 			order,
 			servedTx,
+			syncTx,
 			doorTimer,
 			floorTimer,
 		)
@@ -65,6 +67,7 @@ func HandleFloorArrival(
 	elevConfig *types.ElevConfig,
 	newFloor int,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -84,6 +87,7 @@ func HandleFloorArrival(
 		elevConfig,
 		fsmOutput,
 		servedTx,
+		syncTx,
 		doorTimer,
 		floorTimer,
 	)
@@ -99,6 +103,7 @@ func HandleDoorTimeout(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -116,6 +121,7 @@ func HandleDoorTimeout(
 		elevConfig,
 		fsmOutput,
 		servedTx,
+		syncTx,
 		doorTimer,
 		floorTimer,
 	)

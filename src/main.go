@@ -58,7 +58,6 @@ func main() {
 
 	bidTx := make(chan types.Msg[types.Bid])
 	bidRx := make(chan types.Msg[types.Bid])
-	bidTxSecure := make(chan types.Msg[types.Bid])
 
 	assignTx := make(chan types.Msg[types.Assign])
 	assignRx := make(chan types.Msg[types.Assign])
@@ -66,16 +65,12 @@ func main() {
 
 	servedTx := make(chan types.Msg[types.Served])
 	servedRx := make(chan types.Msg[types.Served])
-	servedTxSecure := make(chan types.Msg[types.Served])
 
 	syncTx := make(chan types.Msg[types.Sync])
 	syncRx := make(chan types.Msg[types.Sync])
-	syncTxSecure := make(chan types.Msg[types.Sync])
 
 	go bcast.Transmitter(BCAST_PORT, bidTx, assignTx, servedTx, syncTx)
 	go bcast.Receiver(BCAST_PORT, bidRx, assignRx, servedRx, syncRx)
-
-	replyReceived := make(chan types.Header)
 
 	for {
 		select {
@@ -94,6 +89,7 @@ func main() {
 				elevConfig,
 				newOrder,
 				servedTx,
+				syncTx,
 				bidTx,
 				assignTx,
 				doorTimer,
@@ -106,6 +102,7 @@ func main() {
 				elevConfig,
 				newFloor,
 				servedTx,
+				syncTx,
 				doorTimer,
 				floorTimer,
 			)
@@ -123,6 +120,7 @@ func main() {
 				elevState,
 				elevConfig,
 				servedTx,
+				syncTx,
 				doorTimer,
 				floorTimer,
 			)
@@ -151,7 +149,7 @@ func main() {
 				continue
 			}
 
-			isReply := bid.Header.AuthorID == elevConfig.NodeI
+			isReply := bid.Header.AuthorID == elevConfig.NodeID
 
 			if !elevState.DoorObstr && !elevState.StuckBetweenFloors {
 				bid.Content.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
@@ -224,12 +222,12 @@ func main() {
 				)
 			}
 
-			if assignMsg.NewAssignee != elevConfig.NodeID {
+			if assign.Content.OldAssignee != elevConfig.NodeID {
 				continue
 			}
 
 			fsmOutput := fsm.OnOrderAssigned(
-				assignMsg.Order,
+				assign.Content.Order,
 				elevState,
 				elevConfig,
 			)
@@ -238,7 +236,8 @@ func main() {
 				elevState,
 				elevConfig,
 				fsmOutput,
-				sendSecureMsg,
+				servedTx,
+				syncTx,
 				doorTimer,
 				floorTimer,
 			)
@@ -250,9 +249,60 @@ func main() {
 				continue
 			}
 
+			elevState = elev.SetOrderStatus(
+				elevState,
+				elevConfig,
+				served.Header.AuthorID,
+				served.Content.Order,
+				false,
+			)
+
+			isReply := served.Header.AuthorID == elevConfig.NodeID
+
+			if !isReply {
+				servedTx <- network.FormatServedMsg(
+					served.Content.Order,
+					elevState.NextNodeID,
+					served.Header.AuthorID,
+				)
+			}
+
 		case sync := <-syncRx:
 			if sync.Header.Recipient != elevConfig.NodeID {
 				continue
+			}
+
+			elevState = elev.OnSync(
+				elevState,
+				elevConfig,
+				sync.Content.Orders,
+			)
+
+			isTarget := sync.Content.TargetID == elevConfig.NodeID
+
+			if isTarget && elevState.Dirn == elevio.MD_Stop {
+				fsmOutput := fsm.OnSync(elevState, elevConfig)
+
+				elevState = elev.SetState(
+					elevState,
+					elevConfig,
+					fsmOutput,
+					servedTx,
+					syncTx,
+					doorTimer,
+					floorTimer,
+				)
+			}
+
+			isReply := sync.Header.AuthorID == elevConfig.NodeID
+
+			if !isReply {
+				syncTx <- network.FormatSyncMsg(
+					sync.Content.Orders,
+					sync.Content.TargetID,
+					elevState.NextNodeID,
+					sync.Header.AuthorID,
+				)
 			}
 
 		default:
