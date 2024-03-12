@@ -2,8 +2,8 @@ package main
 
 import (
 	"Driver-go/elevio"
-	"Network-go/network/bcast"
-	"Network-go/network/peers"
+	"Network-go/bcast"
+	"Network-go/peers"
 	"elevator/elev"
 	"elevator/fsm"
 	"elevator/timer"
@@ -35,6 +35,8 @@ func main() {
 	)
 
 	elevState := elev.InitState(elevConfig)
+
+	elevState.NextNodeID = 1
 
 	// updateSecureSendAddr, replyReceived, sendSecureMsg, disableSecureSend := network.InitSecureSend()
 
