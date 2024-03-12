@@ -24,9 +24,9 @@ func GetMsgHeader(encodedMsg []byte) (*types.Header, error) {
 func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
 	var content T
 
-	encodedHeader := encodedMsg[SIZE_OF_HEADER:]
+	encodedContent := encodedMsg[SIZE_OF_HEADER:]
 
-	err := json.Unmarshal(encodedHeader, &content)
+	err := json.Unmarshal(encodedContent, &content)
 
 	if err != nil {
 		return nil, err
@@ -35,41 +35,9 @@ func GetMsgContent[T types.Content](encodedMsg []byte) (*T, error) {
 	return &content, nil
 }
 
-func FormatAssignMsg(
-	order types.Order,
-	newAssignee int,
-	oldAssignee int,
-	author int,
-) []byte {
-
-	msg := types.Msg[types.Assign]{
-		Header: types.Header{
-			Type:     types.ASSIGN,
-			AuthorID: author,
-		},
-		Content: types.Assign{
-			Order:       order,
-			NewAssignee: newAssignee,
-			OldAssignee: oldAssignee,
-		},
-	}
-
-	return msg.ToJson()
-}
-
-func FormatServedMsg(order types.Order, author int) []byte {
-	msg := types.Msg[types.Served]{
-		Header: types.Header{
-			Type:     types.SERVED,
-			AuthorID: author,
-		},
-		Content: types.Served{
-			Order: order,
-		},
-	}
-
-	return msg.ToJson()
-}
+/*
+ * If provided, only the first value of loopCounter given to the functions below will be used
+ */
 
 func FormatBidMsg(
 	timeToServed []int,
@@ -77,8 +45,8 @@ func FormatBidMsg(
 	oldAssignee int,
 	NumNodes int,
 	author int,
+	loopCounter ...int,
 ) []byte {
-
 	if len(timeToServed) == 0 {
 		timeToServed = make([]int, NumNodes)
 
@@ -87,10 +55,16 @@ func FormatBidMsg(
 		}
 	}
 
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
+
 	msg := types.Msg[types.Bid]{
 		Header: types.Header{
-			Type:     types.BID,
-			AuthorID: author,
+			Type:        types.BID,
+			AuthorID:    author,
+			LoopCounter: tempLoopCounter,
 		},
 		Content: types.Bid{
 			Order:        order,
@@ -102,11 +76,65 @@ func FormatBidMsg(
 	return msg.ToJson()
 }
 
-func FormatSyncMsg(orders [][][]bool, targetID int, author int) []byte {
+func FormatAssignMsg(
+	order types.Order,
+	newAssignee int,
+	oldAssignee int,
+	author int,
+	loopCounter ...int,
+) []byte {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
+
+	msg := types.Msg[types.Assign]{
+		Header: types.Header{
+			Type:        types.ASSIGN,
+			AuthorID:    author,
+			LoopCounter: tempLoopCounter,
+		},
+		Content: types.Assign{
+			Order:       order,
+			NewAssignee: newAssignee,
+			OldAssignee: oldAssignee,
+		},
+	}
+
+	return msg.ToJson()
+}
+
+func FormatServedMsg(order types.Order, author int, loopCounter ...int) []byte {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
+
+	msg := types.Msg[types.Served]{
+		Header: types.Header{
+			Type:        types.SERVED,
+			AuthorID:    author,
+			LoopCounter: tempLoopCounter,
+		},
+		Content: types.Served{
+			Order: order,
+		},
+	}
+
+	return msg.ToJson()
+}
+
+func FormatSyncMsg(orders [][][]bool, targetID int, author int, loopCounter ...int) []byte {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
+
 	msg := types.Msg[types.Sync]{
 		Header: types.Header{
-			Type:     types.SYNC,
-			AuthorID: author,
+			Type:        types.SYNC,
+			AuthorID:    author,
+			LoopCounter: tempLoopCounter,
 		},
 		Content: types.Sync{
 			Orders:   orders,
