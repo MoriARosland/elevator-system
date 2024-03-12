@@ -5,6 +5,7 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
+	"fmt"
 	"slices"
 	"strconv"
 )
@@ -17,6 +18,7 @@ func SetState(
 	elevConfig *types.ElevConfig,
 	stateChanges types.FsmOutput,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -36,11 +38,11 @@ func SetState(
 	}
 
 	newState := types.ElevState{
-		Floor:        oldState.Floor,
-		Dirn:         stateChanges.ElevDirn,
-		DoorObstr:    oldState.DoorObstr,
-		Orders:       oldState.Orders,
-		Disconnected: oldState.Disconnected,
+		Floor:      oldState.Floor,
+		Dirn:       stateChanges.ElevDirn,
+		DoorObstr:  oldState.DoorObstr,
+		Orders:     oldState.Orders,
+		NextNodeID: oldState.NextNodeID,
 	}
 
 	/*
@@ -51,23 +53,24 @@ func SetState(
 			continue
 		}
 
-		if newState.Disconnected {
+		order := types.Order{
+			Button: elevio.ButtonType(order),
+			Floor:  newState.Floor,
+		}
+
+		isAlone := newState.NextNodeID == elevConfig.NodeID
+
+		if isAlone {
 			newState = *SetOrderStatus(
 				&newState,
 				elevConfig,
 				elevConfig.NodeID,
-				types.Order{
-					Button: elevio.ButtonType(order),
-					Floor:  newState.Floor,
-				},
+				order,
 				false,
 			)
 		} else {
 			servedTx <- network.FormatServedMsg(
-				types.Order{
-					Button: elevio.ButtonType(order),
-					Floor:  newState.Floor,
-				},
+				order,
 				newState.NextNodeID,
 				elevConfig.NodeID,
 			)
@@ -106,29 +109,6 @@ func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
 	for floor := range orders {
 		elevio.SetButtonLamp(elevio.BT_Cab, floor, orders[floor][elevio.BT_Cab])
 	}
-}
-
-func HandleDoorObstr(
-	elevState *types.ElevState,
-	isObstructed bool,
-	obstrTimer chan types.TimerActions,
-	doorTimer chan types.TimerActions,
-) *types.ElevState {
-
-	if elevState.DoorObstr == isObstructed {
-		return elevState
-	}
-
-	if isObstructed {
-		obstrTimer <- types.START
-	} else {
-		obstrTimer <- types.STOP
-	}
-
-	doorTimer <- types.START
-	elevState.DoorObstr = isObstructed
-
-	return elevState
 }
 
 func SetOrderStatus(
@@ -195,6 +175,7 @@ func ReassignOrders(
 				Floor:  floor,
 			}
 
+			fmt.Println("Reassigning order: ", order, " from ", nodeID)
 			bidTx <- network.FormatBidMsg(
 				nil,
 				order,
@@ -212,6 +193,7 @@ func SelfAssignOrder(
 	elevConfig *types.ElevConfig,
 	order types.Order,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -230,6 +212,7 @@ func SelfAssignOrder(
 		elevConfig,
 		fsmOutput,
 		servedTx,
+		syncTx,
 		doorTimer,
 		floorTimer,
 	)

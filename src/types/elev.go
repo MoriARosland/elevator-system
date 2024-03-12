@@ -20,5 +20,4 @@ type ElevState struct {
 	DoorObstr          bool
 	Orders             [][][]bool
 	NextNodeID         int
-	Disconnected       bool
 }

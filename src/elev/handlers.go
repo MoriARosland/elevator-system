@@ -12,6 +12,7 @@ func HandleNewOrder(
 	elevConfig *types.ElevConfig,
 	order types.Order,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	bidTx chan types.Msg[types.Bid],
 	assignTx chan types.Msg[types.Assign],
 	doorTimer chan<- types.TimerActions,
@@ -19,23 +20,19 @@ func HandleNewOrder(
 ) *types.ElevState {
 
 	isCabOrder := order.Button == elevio.BT_Cab
+	isAlone := elevState.NextNodeID == elevConfig.NodeID
 
-	if elevState.Disconnected && isCabOrder {
-		/*
-		 * When disconnected we only handle new cab orders
-		 */
+	if isAlone && isCabOrder {
 		elevState = SelfAssignOrder(
 			elevState,
 			elevConfig,
 			order,
 			servedTx,
+			syncTx,
 			doorTimer,
 			floorTimer,
 		)
-	} else if isCabOrder {
-		/*
-		 * Cab orders are selfassigned (over the network)
-		 */
+	} else if !isAlone && isCabOrder {
 		assignTx <- network.FormatAssignMsg(
 			order,
 			elevConfig.NodeID,
@@ -44,9 +41,6 @@ func HandleNewOrder(
 			elevConfig.NodeID,
 		)
 	} else {
-		/*
-		 * Hall orders are assigned after a bidding round
-		 */
 		bidTx <- network.FormatBidMsg(
 			nil,
 			order,
@@ -60,11 +54,35 @@ func HandleNewOrder(
 	return elevState
 }
 
+func HandleDoorObstr(
+	elevState *types.ElevState,
+	isObstructed bool,
+	obstrTimer chan types.TimerActions,
+	doorTimer chan types.TimerActions,
+) *types.ElevState {
+
+	if elevState.DoorObstr == isObstructed {
+		return elevState
+	}
+
+	if isObstructed {
+		obstrTimer <- types.START
+	} else {
+		obstrTimer <- types.STOP
+	}
+
+	doorTimer <- types.START
+	elevState.DoorObstr = isObstructed
+
+	return elevState
+}
+
 func HandleFloorArrival(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	newFloor int,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -84,6 +102,7 @@ func HandleFloorArrival(
 		elevConfig,
 		fsmOutput,
 		servedTx,
+		syncTx,
 		doorTimer,
 		floorTimer,
 	)
@@ -99,6 +118,7 @@ func HandleDoorTimeout(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	servedTx chan types.Msg[types.Served],
+	syncTx chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -116,6 +136,7 @@ func HandleDoorTimeout(
 		elevConfig,
 		fsmOutput,
 		servedTx,
+		syncTx,
 		doorTimer,
 		floorTimer,
 	)
