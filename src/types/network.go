@@ -49,8 +49,9 @@ type Sync struct {
  * -> AuthorID must be btween 0 and 9
  */
 type Header struct {
-	Type     MsgTypes
-	AuthorID int
+	Type        MsgTypes
+	AuthorID    int
+	LoopCounter int
 }
 
 type Content interface {

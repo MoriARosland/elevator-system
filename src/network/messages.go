@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 )
 
-const SIZE_OF_HEADER = 23
+const SIZE_OF_HEADER = 39
 
 func GetMsgHeader(encodedMsg []byte) (*types.Header, error) {
 	var header types.Header
