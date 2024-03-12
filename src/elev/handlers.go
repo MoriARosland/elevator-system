@@ -20,11 +20,9 @@ func HandleNewOrder(
 ) *types.ElevState {
 
 	isCabOrder := order.Button == elevio.BT_Cab
+	isAlone := elevState.NextNodeID == elevConfig.NodeID
 
-	if elevState.Disconnected && isCabOrder {
-		/*
-		 * When disconnected we only handle new cab orders
-		 */
+	if isAlone && isCabOrder {
 		elevState = SelfAssignOrder(
 			elevState,
 			elevConfig,
@@ -34,10 +32,7 @@ func HandleNewOrder(
 			doorTimer,
 			floorTimer,
 		)
-	} else if isCabOrder {
-		/*
-		 * Cab orders are selfassigned (over the network)
-		 */
+	} else if !isAlone && isCabOrder {
 		assignTx <- network.FormatAssignMsg(
 			order,
 			elevConfig.NodeID,
@@ -46,9 +41,6 @@ func HandleNewOrder(
 			elevConfig.NodeID,
 		)
 	} else {
-		/*
-		 * Hall orders are assigned after a bidding round
-		 */
 		bidTx <- network.FormatBidMsg(
 			nil,
 			order,

@@ -9,7 +9,6 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
-	"fmt"
 	"slices"
 	"strconv"
 	"time"
@@ -113,7 +112,6 @@ func main() {
 					elevConfig.NodeID,
 				)
 			} else if oldNextDied {
-				fmt.Println("Reassigning orders of: ", oldNextNodeID, ". Sending to: ", elevState.NextNodeID)
 				elev.ReassignOrders(
 					elevState,
 					elevConfig,
@@ -183,7 +181,6 @@ func main() {
 			)
 
 		case bid := <-bidRx:
-			fmt.Println("Received bid")
 			if bid.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
@@ -214,7 +211,6 @@ func main() {
 			}
 
 		case assign := <-assignRx:
-			fmt.Println("Assignment received")
 			if assign.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
