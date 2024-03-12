@@ -5,50 +5,9 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
-	"fmt"
+	"sort"
+	"strconv"
 )
-
-func InitConfig(
-	nodeID int,
-	numNodes int,
-	numFloors int,
-	numButtons int,
-	doorOpenDuration int,
-) *types.ElevConfig {
-
-	if nodeID+1 > numNodes {
-		panic("Node id greater than number of nodes")
-	}
-
-	elevator := types.ElevConfig{
-		NodeID:           nodeID,
-		NumNodes:         numNodes,
-		NumFloors:        numFloors,
-		NumButtons:       numButtons,
-		DoorOpenDuration: doorOpenDuration,
-	}
-
-	return &elevator
-}
-
-func InitState(elevConfig *types.ElevConfig) *types.ElevState {
-	orders := make([][][]bool, elevConfig.NumNodes)
-
-	for elevator := range orders {
-		orders[elevator] = make([][]bool, elevConfig.NumFloors)
-		for floor := range orders[elevator] {
-			orders[elevator][floor] = make([]bool, elevConfig.NumButtons)
-		}
-	}
-
-	elevState := types.ElevState{
-		Floor:  -1,
-		Dirn:   elevio.MD_Stop,
-		Orders: orders,
-	}
-
-	return &elevState
-}
 
 /*
  * Takes in output from fsm, performs side effects and return new elev state
@@ -116,35 +75,6 @@ func SetState(
 	}
 
 	return &newState
-}
-
-/*
- * Initiate elevator driver and elevator polling
- */
-func InitDriver(
-	elevState *types.ElevState,
-	elevConfig *types.ElevConfig,
-	port int,
-) (chan elevio.ButtonEvent, chan int, chan bool) {
-
-	elevio.Init(fmt.Sprintf("localhost:%d", port), elevConfig.NumFloors)
-
-	drvButtons := make(chan elevio.ButtonEvent)
-	drvFloors := make(chan int)
-	drvObstr := make(chan bool)
-
-	go elevio.PollButtons(drvButtons)
-	go elevio.PollFloorSensor(drvFloors)
-	go elevio.PollObstructionSwitch(drvObstr)
-
-	/*
-	 * Reset elevator to known state
-	 */
-	elevio.SetDoorOpenLamp(false)
-	SetCabLights(elevState.Orders[elevConfig.NodeID], elevConfig)
-	SetHallLights(elevState.Orders, elevConfig)
-
-	return drvButtons, drvFloors, drvObstr
 }
 
 func SetHallLights(orders [][][]bool, elevConfig *types.ElevConfig) {
@@ -307,118 +237,46 @@ func SelfAssignOrder(
 	return elevState
 }
 
-func HandleNewOrder(
-	elevState *types.ElevState,
-	elevConfig *types.ElevConfig,
-	order types.Order,
-	servedTx chan types.Msg[types.Served],
-	bidTx chan types.Msg[types.Bid],
-	assignTx chan types.Msg[types.Assign],
-	doorTimer chan<- types.TimerActions,
-	floorTimer chan<- types.TimerActions,
-) *types.ElevState {
+func strArrToInt(strArr []string) []int {
+	intArr := make([]int, len(strArr))
 
-	isCabOrder := order.Button == elevio.BT_Cab
-
-	if elevState.Disconnected && isCabOrder {
-		/*
-		 * When disconnected we only handle new cab orders
-		 */
-		elevState = SelfAssignOrder(
-			elevState,
-			elevConfig,
-			order,
-			servedTx,
-			doorTimer,
-			floorTimer,
-		)
-	} else if isCabOrder {
-		/*
-		 * Cab orders are selfassigned (over the network)
-		 */
-		assignTx <- network.FormatAssignMsg(
-			order,
-			elevConfig.NodeID,
-			int(types.UNASSIGNED),
-			elevState.NextNodeID,
-			elevConfig.NodeID,
-		)
-	} else {
-		/*
-		 * Hall orders are assigned after a bidding round
-		 */
-		bidTx <- network.FormatBidMsg(
-			nil,
-			order,
-			int(types.UNASSIGNED),
-			elevConfig.NumNodes,
-			elevState.NextNodeID,
-			elevConfig.NodeID,
-		)
+	for i, el := range strArr {
+		num, _ := strconv.Atoi(el)
+		intArr[i] = num
 	}
 
-	return elevState
+	return intArr
 }
 
-func HandleFloorArrival(
-	elevState *types.ElevState,
-	elevConfig *types.ElevConfig,
-	newFloor int,
-	servedTx chan types.Msg[types.Served],
-	doorTimer chan<- types.TimerActions,
-	floorTimer chan<- types.TimerActions,
-) *types.ElevState {
-
-	oldFloor := elevState.Floor
-
-	elevState.Floor = newFloor
-	elevio.SetFloorIndicator(newFloor)
-
-	floorTimer <- types.STOP
-	elevState.StuckBetweenFloors = false
-
-	fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
-
-	elevState = SetState(
-		elevState,
-		elevConfig,
-		fsmOutput,
-		servedTx,
-		doorTimer,
-		floorTimer,
-	)
-
-	if !fsmOutput.SetMotor && oldFloor != -1 {
-		floorTimer <- types.START
+func indexOf(arr []int, val int) int {
+	for i := range arr {
+		if arr[i] == val {
+			return i
+		}
 	}
 
-	return elevState
+	return -1
 }
 
-func HandleDoorTimeout(
+func SetNextNodeID(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
-	servedTx chan types.Msg[types.Served],
-	doorTimer chan<- types.TimerActions,
-	floorTimer chan<- types.TimerActions,
+	peersStr []string,
 ) *types.ElevState {
+	peers := strArrToInt(peersStr)
+	sort.Ints(peers)
 
-	if elevState.DoorObstr {
-		doorTimer <- types.START
+	indexOfNodeID := indexOf(peers, elevConfig.NodeID)
+
+	if 0 > indexOfNodeID {
 		return elevState
 	}
-	doorTimer <- types.STOP
 
-	fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
-
-	elevState = SetState(
-		elevState,
-		elevConfig,
-		fsmOutput,
-		servedTx,
-		doorTimer,
-		floorTimer,
-	)
+	if indexOfNodeID >= len(peers)-1 {
+		elevState.NextNodeID = peers[0]
+	} else {
+		elevState.NextNodeID = peers[indexOfNodeID+1]
+	}
 
 	return elevState
 }

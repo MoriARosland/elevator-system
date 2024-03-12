@@ -72,9 +72,14 @@ func main() {
 
 	for {
 		select {
-		case newPeerList := <-peerUpdate:
-			// update next node id in elevstate
-			fmt.Println("New peer list: ", newPeerList.Peers)
+		case newPeers := <-peerUpdate:
+			elevState = elev.SetNextNodeID(
+				elevState,
+				elevConfig,
+				newPeers.Peers,
+			)
+
+			fmt.Println("New next node: ", elevState.NextNodeID)
 
 		case newOrder := <-drvButtons:
 			elevState = elev.HandleNewOrder(

@@ -24,9 +24,6 @@ func Transmitter(port int, chans ...interface{}) {
 		typeNames[i] = reflect.TypeOf(ch).Elem().String()
 	}
 
-	fmt.Println(selectCases)
-	fmt.Println(typeNames)
-
 	conn := conn.DialBroadcastUDP(port)
 	addr, _ := net.ResolveUDPAddr("udp4", fmt.Sprintf("255.255.255.255:%d", port))
 	for {
