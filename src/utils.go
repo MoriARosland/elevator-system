@@ -1,6 +1,7 @@
 package main
 
 import (
+	"elevator/types"
 	"flag"
 	"fmt"
 	"os"
@@ -40,3 +41,11 @@ func parseCommandlineFlags() (int, int, int) {
 
 // 	return slices.Index(timeToServed, result)
 // }
+
+func printNextNode(elevState *types.ElevState, elevConfig *types.ElevConfig) {
+	fmt.Print("\033[2J\033[2;0H\r  ")
+	fmt.Printf("ID: %d | NextID: %d \n\n",
+		elevConfig.NodeID,
+		elevState.NextNodeID,
+	)
+}

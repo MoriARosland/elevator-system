@@ -5,7 +5,7 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
-	"sort"
+	"slices"
 	"strconv"
 )
 
@@ -264,7 +264,7 @@ func SetNextNodeID(
 	peersStr []string,
 ) *types.ElevState {
 	peers := strArrToInt(peersStr)
-	sort.Ints(peers)
+	slices.Sort(peers)
 
 	indexOfNodeID := indexOf(peers, elevConfig.NodeID)
 
@@ -279,4 +279,18 @@ func SetNextNodeID(
 	}
 
 	return elevState
+}
+
+func ShouldSendSync(
+	nodeID int,
+	oldNextNode int,
+	newNextNode int,
+	newPeerStr string,
+) bool {
+	if len(newPeerStr) == 0 {
+		return false
+	}
+
+	newPeerInt, _ := strconv.Atoi(newPeerStr)
+	return newNextNode == newPeerInt && oldNextNode != -1 && newNextNode != nodeID
 }
