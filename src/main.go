@@ -9,6 +9,7 @@ import (
 	"elevator/timer"
 	"elevator/types"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -53,7 +54,7 @@ func main() {
 	peerUpdate := make(chan peers.PeerUpdate)
 	peerTxEnable := make(chan bool)
 
-	go peers.Transmitter(PEER_PORT, string(elevConfig.NodeID), peerTxEnable)
+	go peers.Transmitter(PEER_PORT, strconv.Itoa(elevConfig.NodeID), peerTxEnable)
 	go peers.Receiver(PEER_PORT, peerUpdate)
 
 	bidTx := make(chan types.Msg[types.Bid])
@@ -78,36 +79,82 @@ func main() {
 			fmt.Println("New peer list: ", newPeerList.Peers)
 
 		case newOrder := <-drvButtons:
-			fmt.Println("New order: ", newOrder)
+			elevState = elev.HandleNewOrder(
+				elevState,
+				elevConfig,
+				newOrder,
+				servedTx,
+				bidTx,
+				assignTx,
+				doorTimer,
+				floorTimer,
+			)
 
 		case newFloor := <-drvFloors:
-			fmt.Println("New floor: ", newFloor)
+			elevState = elev.HandleFloorArrival(
+				elevState,
+				elevConfig,
+				newFloor,
+				servedTx,
+				doorTimer,
+				floorTimer,
+			)
 
 		case isObstructed := <-drvObstr:
-			fmt.Println("Obstr: ", isObstructed)
+			elevState = elev.HandleDoorObstr(
+				elevState,
+				isObstructed,
+				obstrTimer,
+				doorTimer,
+			)
 
 		case <-doorTimeout:
-			fmt.Println("Door timed out")
+			elevState = elev.HandleDoorTimeout(
+				elevState,
+				elevConfig,
+				servedTx,
+				doorTimer,
+				floorTimer,
+			)
 
 		case <-obstrTimeout:
 			obstrTimer <- types.STOP
-			fmt.Println("Door not closing")
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				elevConfig.NodeID,
+				bidTx,
+			)
 
 		case <-floorTimeout:
 			elevState.StuckBetweenFloors = true
-			fmt.Println("Stuck")
+			elev.ReassignOrders(
+				elevState,
+				elevConfig,
+				elevConfig.NodeID,
+				bidTx,
+			)
 
 		case bid := <-bidRx:
-			fmt.Println(bid)
+			fmt.Println("Received msg: ", bid)
+			if bid.Header.Recipient != elevConfig.NodeID {
+				continue
+			}
 
 		case assign := <-assignRx:
-			fmt.Println(assign)
+			if assign.Header.Recipient != elevConfig.NodeID {
+				continue
+			}
 
 		case served := <-servedRx:
-			fmt.Println(served)
+			if served.Header.Recipient != elevConfig.NodeID {
+				continue
+			}
 
 		case sync := <-syncRx:
-			fmt.Println(sync)
+			if sync.Header.Recipient != elevConfig.NodeID {
+				continue
+			}
 
 		default:
 			continue
