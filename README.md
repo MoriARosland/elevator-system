@@ -19,7 +19,7 @@ Install Simulator-v2 locally and follow the readme. If you are running macOS Son
 Download the elevator-system with:
 
 ```bash
-git clone git+https://github.com/Mathiasotnes/Deep-Learning.git
+git clone https://github.com/MoriARosland/elevator-system.git
 ```
 
 Cd to elevator-system and build the project with:
