@@ -320,6 +320,7 @@ func HandleNewOrder(
 	isCabOrder := order.Button == elevio.BT_Cab
 
 	if elevState.Disconnected && isCabOrder {
+		fmt.Println("disconnected cab call")
 		/*
 		 * When disconnected we only handle new cab orders
 		 */
@@ -332,6 +333,7 @@ func HandleNewOrder(
 			floorTimer,
 		)
 	} else if isCabOrder {
+		fmt.Println("connected cab call")
 		/*
 		 * Cab orders are selfassigned (over the network)
 		 */
@@ -342,6 +344,7 @@ func HandleNewOrder(
 			elevConfig.NodeID,
 		)
 	} else {
+		fmt.Println("connected hall call")
 		/*
 		 * Hall orders are assigned after a bidding round
 		 */

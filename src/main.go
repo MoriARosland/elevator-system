@@ -7,6 +7,7 @@ import (
 	"elevator/network"
 	"elevator/timer"
 	"elevator/types"
+	"fmt"
 	"time"
 )
 
@@ -100,6 +101,9 @@ func main() {
 			disableSecureSend <- disconnected
 
 		case newOrder := <-drvButtons:
+
+			fmt.Println("new button press")
+
 			elevState = elev.HandleNewOrder(
 				elevState,
 				elevConfig,
@@ -134,14 +138,20 @@ func main() {
 				continue
 			}
 
+			loopCounter := header.LoopCounter
 			isReply := header.AuthorID == elevConfig.NodeID
 
 			if isReply {
 				replyReceived <- *header
+			} else {
+				loopCounter += 1
 			}
+			meldingstype := ""
 
 			switch header.Type {
 			case types.BID:
+				meldingstype = "bid"
+
 				bidMsg, err := network.GetMsgContent[types.Bid](encodedMsg)
 
 				if err != nil {
@@ -175,9 +185,12 @@ func main() {
 					bidMsg.OldAssignee,
 					elevConfig.NumNodes,
 					header.AuthorID,
+					loopCounter,
 				)
 
 			case types.ASSIGN:
+				meldingstype = "assign"
+
 				assignMsg, err := network.GetMsgContent[types.Assign](encodedMsg)
 
 				if err != nil {
@@ -206,7 +219,16 @@ func main() {
 				 * Make sure that the message is forwarded before updating
 				 * state in case the order is to be cleared immediately
 				 */
-				if !isReply {
+				if !isReply && loopCounter < elevConfig.NumNodes {
+
+					encodedMsg = network.FormatAssignMsg(
+						assignMsg.Order,
+						assignMsg.NewAssignee,
+						assignMsg.OldAssignee,
+						header.AuthorID,
+						loopCounter,
+					)
+
 					network.Send(elevState.NextNode.Addr, encodedMsg)
 				}
 
@@ -232,6 +254,9 @@ func main() {
 				continue
 
 			case types.SERVED:
+
+				meldingstype = "served"
+
 				servedMsg, err := network.GetMsgContent[types.Served](encodedMsg)
 
 				if err != nil {
@@ -246,7 +271,12 @@ func main() {
 					false,
 				)
 
+				encodedMsg = network.FormatServedMsg(servedMsg.Order, header.AuthorID, loopCounter)
+
 			case types.SYNC:
+
+				meldingstype = "sync"
+
 				syncMsg, err := network.GetMsgContent[types.Sync](encodedMsg)
 
 				if err != nil {
@@ -274,10 +304,18 @@ func main() {
 					)
 				}
 
-				encodedMsg = network.FormatSyncMsg(elevState.Orders, syncMsg.TargetID, header.AuthorID)
+				encodedMsg = network.FormatSyncMsg(elevState.Orders, syncMsg.TargetID, header.AuthorID, loopCounter)
+
+				if !isReply {
+					network.Send(elevState.NextNode.Addr, encodedMsg)
+				}
+
 			}
 
-			if !isReply {
+			head, _ := network.GetMsgHeader(encodedMsg)
+			fmt.Println("message of type: ", meldingstype, ", to be sent with loopCounter:", head.LoopCounter)
+
+			if !isReply && loopCounter < elevConfig.NumNodes {
 				network.Send(elevState.NextNode.Addr, encodedMsg)
 			}
 
