@@ -6,6 +6,8 @@ The network topology of the system is circular, where data flows from one elevat
 
 ## Program Notes
 
+**IMPORTANT: Program only runs on Go ^1.21.**
+
 The program contains a elevator-state object (elevState) containing all neccesarry information. This object is only modified by reference when calling functions, meaning no function return is neccassary.
 
 These functions do still return a pointer to the object, which functionally does nothing. The reason for this design is to clarify when an elevator-state object is modified.
