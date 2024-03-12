@@ -5,6 +5,8 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
+	"sort"
+	"strconv"
 )
 
 /*
@@ -231,6 +233,50 @@ func SelfAssignOrder(
 		doorTimer,
 		floorTimer,
 	)
+
+	return elevState
+}
+
+func strArrToInt(strArr []string) []int {
+	intArr := make([]int, len(strArr))
+
+	for i, el := range strArr {
+		num, _ := strconv.Atoi(el)
+		intArr[i] = num
+	}
+
+	return intArr
+}
+
+func indexOf(arr []int, val int) int {
+	for i := range arr {
+		if arr[i] == val {
+			return i
+		}
+	}
+
+	return -1
+}
+
+func SetNextNodeID(
+	elevState *types.ElevState,
+	elevConfig *types.ElevConfig,
+	peersStr []string,
+) *types.ElevState {
+	peers := strArrToInt(peersStr)
+	sort.Ints(peers)
+
+	indexOfNodeID := indexOf(peers, elevConfig.NodeID)
+
+	if 0 > indexOfNodeID {
+		return elevState
+	}
+
+	if indexOfNodeID >= len(peers)-1 {
+		elevState.NextNodeID = peers[0]
+	} else {
+		elevState.NextNodeID = peers[indexOfNodeID+1]
+	}
 
 	return elevState
 }
