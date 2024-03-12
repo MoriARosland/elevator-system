@@ -36,10 +36,6 @@ func main() {
 
 	elevState := elev.InitState(elevConfig)
 
-	elevState.NextNodeID = 1
-
-	// updateSecureSendAddr, replyReceived, sendSecureMsg, disableSecureSend := network.InitSecureSend()
-
 	drvButtons, drvFloors, drvObstr := elev.InitDriver(elevState, elevConfig, elevServerPort)
 
 	doorTimeout, doorTimer := timer.New(DOOR_OPEN_DURATION * time.Millisecond)
