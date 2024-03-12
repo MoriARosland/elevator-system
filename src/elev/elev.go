@@ -5,6 +5,7 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
+	"fmt"
 	"slices"
 	"strconv"
 )
@@ -42,6 +43,7 @@ func SetState(
 		DoorObstr:    oldState.DoorObstr,
 		Orders:       oldState.Orders,
 		Disconnected: oldState.Disconnected,
+		NextNodeID:   oldState.NextNodeID,
 	}
 
 	/*
@@ -109,29 +111,6 @@ func SetCabLights(orders [][]bool, elevConfig *types.ElevConfig) {
 	}
 }
 
-func HandleDoorObstr(
-	elevState *types.ElevState,
-	isObstructed bool,
-	obstrTimer chan types.TimerActions,
-	doorTimer chan types.TimerActions,
-) *types.ElevState {
-
-	if elevState.DoorObstr == isObstructed {
-		return elevState
-	}
-
-	if isObstructed {
-		obstrTimer <- types.START
-	} else {
-		obstrTimer <- types.STOP
-	}
-
-	doorTimer <- types.START
-	elevState.DoorObstr = isObstructed
-
-	return elevState
-}
-
 func SetOrderStatus(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
@@ -196,6 +175,7 @@ func ReassignOrders(
 				Floor:  floor,
 			}
 
+			fmt.Println("Reassigning order: ", order, " from ", nodeID)
 			bidTx <- network.FormatBidMsg(
 				nil,
 				order,

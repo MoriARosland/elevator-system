@@ -15,8 +15,8 @@ import (
 	"time"
 )
 
-const BCAST_PORT = 16421
-const PEER_PORT = 17421
+const BCAST_PORT = 16491
+const PEER_PORT = 17441
 
 const NUM_BUTTONS = 3
 const NUM_FLOORS = 4
@@ -44,25 +44,11 @@ func main() {
 	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
 	floorTimeout, floorTimer := timer.New(FLOOR_ARRIVAL_TIMEOUT * time.Millisecond)
 
-	if 0 > elevio.GetFloor() {
-		elevio.SetMotorDirection(elevio.MD_Down)
-		elevState.Dirn = elevio.MD_Down
-		fsm.OnInitBetweenFloors()
-		floorTimer <- types.START
-	}
-
-	peerUpdate := make(chan peers.PeerUpdate)
-	peerTxEnable := make(chan bool)
-
-	go peers.Transmitter(PEER_PORT, strconv.Itoa(elevConfig.NodeID), peerTxEnable)
-	go peers.Receiver(PEER_PORT, peerUpdate)
-
 	bidTx := make(chan types.Msg[types.Bid])
 	bidRx := make(chan types.Msg[types.Bid])
 
 	assignTx := make(chan types.Msg[types.Assign])
 	assignRx := make(chan types.Msg[types.Assign])
-	assignTxSecure := make(chan types.Msg[types.Assign])
 
 	servedTx := make(chan types.Msg[types.Served])
 	servedRx := make(chan types.Msg[types.Served])
@@ -72,6 +58,31 @@ func main() {
 
 	go bcast.Transmitter(BCAST_PORT, bidTx, assignTx, servedTx, syncTx)
 	go bcast.Receiver(BCAST_PORT, bidRx, assignRx, servedRx, syncRx)
+
+	if 0 > elevio.GetFloor() {
+		elevio.SetMotorDirection(elevio.MD_Down)
+		elevState.Dirn = elevio.MD_Down
+		fsm.OnInitBetweenFloors()
+		floorTimer <- types.START
+	}
+
+	newFloor := <-drvFloors
+
+	elevState = elev.HandleFloorArrival(
+		elevState,
+		elevConfig,
+		newFloor,
+		servedTx,
+		syncTx,
+		doorTimer,
+		floorTimer,
+	)
+
+	peerUpdate := make(chan peers.PeerUpdate)
+	peerTxEnable := make(chan bool)
+
+	go peers.Transmitter(PEER_PORT, strconv.Itoa(elevConfig.NodeID), peerTxEnable)
+	go peers.Receiver(PEER_PORT, peerUpdate)
 
 	for {
 		select {
@@ -85,7 +96,7 @@ func main() {
 
 			printNextNode(elevState, elevConfig)
 
-			shoudSendSync := elev.ShouldSendSync(
+			shouldSendSync := elev.ShouldSendSync(
 				elevConfig.NodeID,
 				oldNextNodeID,
 				elevState.NextNodeID,
@@ -94,18 +105,19 @@ func main() {
 
 			oldNextDied := slices.Contains(newPeerList.Lost, strconv.Itoa(oldNextNodeID))
 
-			if shoudSendSync {
+			if shouldSendSync {
 				syncTx <- network.FormatSyncMsg(
 					elevState.Orders,
-					nodeID,
+					elevState.NextNodeID,
 					elevState.NextNodeID,
 					elevConfig.NodeID,
 				)
 			} else if oldNextDied {
+				fmt.Println("Reassigning orders of: ", oldNextNodeID, ". Sending to: ", elevState.NextNodeID)
 				elev.ReassignOrders(
 					elevState,
 					elevConfig,
-					nodeID,
+					oldNextNodeID,
 					bidTx,
 				)
 			}
@@ -171,10 +183,10 @@ func main() {
 			)
 
 		case bid := <-bidRx:
+			fmt.Println("Received bid")
 			if bid.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
-			fmt.Println("Received bid")
 
 			isReply := bid.Header.AuthorID == elevConfig.NodeID
 
@@ -186,34 +198,26 @@ func main() {
 				)
 			}
 
-			if isReply {
+			if !isReply {
+				bid.Header.Recipient = elevState.NextNodeID
+				bidTx <- bid
+			} else {
 				assignee := minTimeToServed(bid.Content.TimeToServed)
 
-				assignTxSecure <- network.FormatAssignMsg(
+				assignTx <- network.FormatAssignMsg(
 					bid.Content.Order,
 					assignee,
 					bid.Content.OldAssignee,
 					elevState.NextNodeID,
 					elevConfig.NodeID,
 				)
-
-				continue
 			}
 
-			bidTx <- network.FormatBidMsg(
-				bid.Content.TimeToServed,
-				bid.Content.Order,
-				bid.Content.OldAssignee,
-				elevConfig.NumNodes,
-				elevState.NextNodeID,
-				bid.Header.AuthorID,
-			)
-
 		case assign := <-assignRx:
+			fmt.Println("Assignment received")
 			if assign.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
-			fmt.Println("Received assign")
 
 			if assign.Content.OldAssignee != int(types.UNASSIGNED) {
 				elevState = elev.SetOrderStatus(
@@ -228,29 +232,23 @@ func main() {
 			elevState = elev.SetOrderStatus(
 				elevState,
 				elevConfig,
-				assign.Content.OldAssignee,
+				assign.Content.NewAssignee,
 				assign.Content.Order,
 				true,
 			)
 
 			/*
-			* Make sure that the message is forwarded before updating
-			* state in case the order is to be cleared immediately
+			 * Make sure that the message is forwarded before updating
+			 * state in case the order is to be cleared immediately
 			 */
-
 			isReply := assign.Header.AuthorID == elevConfig.NodeID
 
 			if !isReply {
-				assignTx <- network.FormatAssignMsg(
-					assign.Content.Order,
-					assign.Content.NewAssignee,
-					assign.Content.OldAssignee,
-					elevState.NextNodeID,
-					assign.Header.AuthorID,
-				)
+				assign.Header.Recipient = elevState.NextNodeID
+				assignTx <- assign
 			}
 
-			if assign.Content.OldAssignee != elevConfig.NodeID {
+			if assign.Content.NewAssignee != elevConfig.NodeID {
 				continue
 			}
 
@@ -270,13 +268,10 @@ func main() {
 				floorTimer,
 			)
 
-			continue
-
 		case served := <-servedRx:
 			if served.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
-			fmt.Println("Received served")
 
 			elevState = elev.SetOrderStatus(
 				elevState,
@@ -289,18 +284,14 @@ func main() {
 			isReply := served.Header.AuthorID == elevConfig.NodeID
 
 			if !isReply {
-				servedTx <- network.FormatServedMsg(
-					served.Content.Order,
-					elevState.NextNodeID,
-					served.Header.AuthorID,
-				)
+				served.Header.Recipient = elevState.NextNodeID
+				servedTx <- served
 			}
 
 		case sync := <-syncRx:
 			if sync.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
-			fmt.Println("Received sync")
 
 			elevState = elev.OnSync(
 				elevState,
@@ -327,12 +318,9 @@ func main() {
 			isReply := sync.Header.AuthorID == elevConfig.NodeID
 
 			if !isReply {
-				syncTx <- network.FormatSyncMsg(
-					sync.Content.Orders,
-					sync.Content.TargetID,
-					elevState.NextNodeID,
-					sync.Header.AuthorID,
-				)
+				sync.Header.Recipient = elevState.NextNodeID
+				sync.Content.Orders = elevState.Orders
+				syncTx <- sync
 			}
 
 		default:

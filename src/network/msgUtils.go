@@ -80,7 +80,7 @@ func FormatServedMsg(
 
 func FormatSyncMsg(
 	orders [][][]bool,
-	targetID int,
+	syncTarget int,
 	recipient int,
 	author int,
 ) types.Msg[types.Sync] {
@@ -92,7 +92,7 @@ func FormatSyncMsg(
 		},
 		Content: types.Sync{
 			Orders:   orders,
-			TargetID: targetID,
+			TargetID: syncTarget,
 		},
 	}
 
