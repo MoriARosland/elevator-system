@@ -14,7 +14,6 @@ func InitConfig(
 	numFloors int,
 	numButtons int,
 	doorOpenDuration int,
-	basePort int,
 ) *types.ElevConfig {
 
 	if nodeID+1 > numNodes {
@@ -27,7 +26,6 @@ func InitConfig(
 		NumFloors:        numFloors,
 		NumButtons:       numButtons,
 		DoorOpenDuration: doorOpenDuration,
-		BroadcastPort:    basePort + nodeID,
 	}
 
 	return &elevator
@@ -59,7 +57,7 @@ func SetState(
 	oldState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	stateChanges types.FsmOutput,
-	sendSecureMsg chan<- []byte,
+	servedTx
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -83,7 +81,6 @@ func SetState(
 		Dirn:         stateChanges.ElevDirn,
 		DoorObstr:    oldState.DoorObstr,
 		Orders:       oldState.Orders,
-		NextNode:     oldState.NextNode,
 		Disconnected: oldState.Disconnected,
 	}
 
@@ -107,7 +104,7 @@ func SetState(
 				false,
 			)
 		} else {
-			sendSecureMsg <- network.FormatServedMsg(
+			servedTx <- network.FormatServedMsg(
 				types.Order{
 					Button: elevio.ButtonType(order),
 					Floor:  newState.Floor,
