@@ -71,4 +71,4 @@ Repeat the commands above as many times as the -num flag. Remember to set -id, -
 
 ## Repository activity
 
-![Alt](https://repobeats.axiom.co/api/embed/359927114a85e3f95cbe1c54958fd3158a42f3e8.svg "Repobeats analytics image")
+![Alt](https://repobeats.axiom.co/api/embed/3cdbb9e89645f822cf0bf49fa4132340888bee60.svg "Repobeats analytics image")
