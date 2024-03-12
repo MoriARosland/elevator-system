@@ -10,6 +10,7 @@ import (
 	"elevator/timer"
 	"elevator/types"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 )
@@ -74,14 +75,40 @@ func main() {
 
 	for {
 		select {
-		case newPeers := <-peerUpdate:
+		case newPeerList := <-peerUpdate:
+			oldNextNodeID := elevState.NextNodeID
 			elevState = elev.SetNextNodeID(
 				elevState,
 				elevConfig,
-				newPeers.Peers,
+				newPeerList.Peers,
 			)
 
-			fmt.Println("New next node: ", elevState.NextNodeID)
+			printNextNode(elevState, elevConfig)
+
+			shoudSendSync := elev.ShouldSendSync(
+				elevConfig.NodeID,
+				oldNextNodeID,
+				elevState.NextNodeID,
+				newPeerList.New,
+			)
+
+			oldNextDied := slices.Contains(newPeerList.Lost, strconv.Itoa(oldNextNodeID))
+
+			if shoudSendSync {
+				syncTx <- network.FormatSyncMsg(
+					elevState.Orders,
+					nodeID,
+					elevState.NextNodeID,
+					elevConfig.NodeID,
+				)
+			} else if oldNextDied {
+				elev.ReassignOrders(
+					elevState,
+					elevConfig,
+					nodeID,
+					bidTx,
+				)
+			}
 
 		case newOrder := <-drvButtons:
 			elevState = elev.HandleNewOrder(
@@ -144,10 +171,10 @@ func main() {
 			)
 
 		case bid := <-bidRx:
-			fmt.Println("Received msg: ", bid)
 			if bid.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
+			fmt.Println("Received bid")
 
 			isReply := bid.Header.AuthorID == elevConfig.NodeID
 
@@ -186,6 +213,7 @@ func main() {
 			if assign.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
+			fmt.Println("Received assign")
 
 			if assign.Content.OldAssignee != int(types.UNASSIGNED) {
 				elevState = elev.SetOrderStatus(
@@ -248,6 +276,7 @@ func main() {
 			if served.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
+			fmt.Println("Received served")
 
 			elevState = elev.SetOrderStatus(
 				elevState,
@@ -271,6 +300,7 @@ func main() {
 			if sync.Header.Recipient != elevConfig.NodeID {
 				continue
 			}
+			fmt.Println("Received sync")
 
 			elevState = elev.OnSync(
 				elevState,

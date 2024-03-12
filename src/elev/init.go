@@ -43,6 +43,7 @@ func InitState(elevConfig *types.ElevConfig) *types.ElevState {
 		Floor:  -1,
 		Dirn:   elevio.MD_Stop,
 		Orders: orders,
+		NextNodeID: -1,
 	}
 
 	return &elevState
