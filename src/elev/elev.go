@@ -38,12 +38,11 @@ func SetState(
 	}
 
 	newState := types.ElevState{
-		Floor:        oldState.Floor,
-		Dirn:         stateChanges.ElevDirn,
-		DoorObstr:    oldState.DoorObstr,
-		Orders:       oldState.Orders,
-		Disconnected: oldState.Disconnected,
-		NextNodeID:   oldState.NextNodeID,
+		Floor:      oldState.Floor,
+		Dirn:       stateChanges.ElevDirn,
+		DoorObstr:  oldState.DoorObstr,
+		Orders:     oldState.Orders,
+		NextNodeID: oldState.NextNodeID,
 	}
 
 	/*
@@ -54,23 +53,24 @@ func SetState(
 			continue
 		}
 
-		if newState.Disconnected {
+		order := types.Order{
+			Button: elevio.ButtonType(order),
+			Floor:  newState.Floor,
+		}
+
+		isAlone := newState.NextNodeID == elevConfig.NodeID
+
+		if isAlone {
 			newState = *SetOrderStatus(
 				&newState,
 				elevConfig,
 				elevConfig.NodeID,
-				types.Order{
-					Button: elevio.ButtonType(order),
-					Floor:  newState.Floor,
-				},
+				order,
 				false,
 			)
 		} else {
 			servedTx <- network.FormatServedMsg(
-				types.Order{
-					Button: elevio.ButtonType(order),
-					Floor:  newState.Floor,
-				},
+				order,
 				newState.NextNodeID,
 				elevConfig.NodeID,
 			)
