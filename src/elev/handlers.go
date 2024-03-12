@@ -11,10 +11,10 @@ func HandleNewOrder(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	order types.Order,
-	servedTx chan types.Msg[types.Served],
-	syncTx chan types.Msg[types.Sync],
-	bidTx chan types.Msg[types.Bid],
-	assignTx chan types.Msg[types.Assign],
+	servedTxSecure chan types.Msg[types.Served],
+	syncTxSecure chan types.Msg[types.Sync],
+	bidTxSecure chan types.Msg[types.Bid],
+	assignTxSecure chan types.Msg[types.Assign],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -27,13 +27,13 @@ func HandleNewOrder(
 			elevState,
 			elevConfig,
 			order,
-			servedTx,
-			syncTx,
+			servedTxSecure,
+			syncTxSecure,
 			doorTimer,
 			floorTimer,
 		)
 	} else if !isAlone && isCabOrder {
-		assignTx <- network.FormatAssignMsg(
+		assignTxSecure <- network.FormatAssignMsg(
 			order,
 			elevConfig.NodeID,
 			int(types.UNASSIGNED),
@@ -41,7 +41,7 @@ func HandleNewOrder(
 			elevConfig.NodeID,
 		)
 	} else {
-		bidTx <- network.FormatBidMsg(
+		bidTxSecure <- network.FormatBidMsg(
 			nil,
 			order,
 			int(types.UNASSIGNED),
@@ -81,8 +81,8 @@ func HandleFloorArrival(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	newFloor int,
-	servedTx chan types.Msg[types.Served],
-	syncTx chan types.Msg[types.Sync],
+	servedTxSecure chan types.Msg[types.Served],
+	syncTxSecure chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -101,8 +101,8 @@ func HandleFloorArrival(
 		elevState,
 		elevConfig,
 		fsmOutput,
-		servedTx,
-		syncTx,
+		servedTxSecure,
+		syncTxSecure,
 		doorTimer,
 		floorTimer,
 	)
@@ -117,8 +117,8 @@ func HandleFloorArrival(
 func HandleDoorTimeout(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
-	servedTx chan types.Msg[types.Served],
-	syncTx chan types.Msg[types.Sync],
+	servedTxSecure chan types.Msg[types.Served],
+	syncTxSecure chan types.Msg[types.Sync],
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -135,8 +135,8 @@ func HandleDoorTimeout(
 		elevState,
 		elevConfig,
 		fsmOutput,
-		servedTx,
-		syncTx,
+		servedTxSecure,
+		syncTxSecure,
 		doorTimer,
 		floorTimer,
 	)
