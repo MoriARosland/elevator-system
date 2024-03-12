@@ -18,7 +18,7 @@ const BCAST_PORT = 16491
 const PEER_PORT = 17441
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 4
+const NUM_FLOORS = 6
 
 const DOOR_OPEN_DURATION = 3000
 const DOOR_OBSTR_TIMEOUT = 6000
@@ -46,14 +46,58 @@ func main() {
 	bidTx := make(chan types.Msg[types.Bid])
 	bidRx := make(chan types.Msg[types.Bid])
 
+	bidSetRecipient := make(chan int)
+	bidReplyReceived := make(chan bool)
+	bidTxSecure := make(chan types.Msg[types.Bid])
+
+	go network.SecureTransmitter[types.Bid](
+		bidSetRecipient,
+		bidReplyReceived,
+		bidTx,
+		bidTxSecure,
+	)
+
 	assignTx := make(chan types.Msg[types.Assign])
 	assignRx := make(chan types.Msg[types.Assign])
+
+	assignSetRecipient := make(chan int)
+	assignReplyReceived := make(chan bool)
+	assignTxSecure := make(chan types.Msg[types.Assign])
+
+	go network.SecureTransmitter[types.Assign](
+		assignSetRecipient,
+		assignReplyReceived,
+		assignTx,
+		assignTxSecure,
+	)
 
 	servedTx := make(chan types.Msg[types.Served])
 	servedRx := make(chan types.Msg[types.Served])
 
+	servedSetRecipient := make(chan int)
+	servedReplyReceived := make(chan bool)
+	servedTxSecure := make(chan types.Msg[types.Served])
+
+	go network.SecureTransmitter[types.Served](
+		servedSetRecipient,
+		servedReplyReceived,
+		servedTx,
+		servedTxSecure,
+	)
+
 	syncTx := make(chan types.Msg[types.Sync])
 	syncRx := make(chan types.Msg[types.Sync])
+
+	syncSetRecipient := make(chan int)
+	syncReplyReceived := make(chan bool)
+	syncTxSecure := make(chan types.Msg[types.Sync])
+
+	go network.SecureTransmitter[types.Sync](
+		syncSetRecipient,
+		syncReplyReceived,
+		syncTx,
+		syncTxSecure,
+	)
 
 	go bcast.Transmitter(BCAST_PORT, bidTx, assignTx, servedTx, syncTx)
 	go bcast.Receiver(BCAST_PORT, bidRx, assignRx, servedRx, syncRx)
@@ -95,6 +139,13 @@ func main() {
 
 			printNextNode(elevState, elevConfig)
 
+			if elevState.NextNodeID != oldNextNodeID {
+				bidSetRecipient <- elevState.NextNodeID
+				assignSetRecipient <- elevState.NextNodeID
+				servedSetRecipient <- elevState.NextNodeID
+				syncSetRecipient <- elevState.NextNodeID
+			}
+
 			shouldSendSync := elev.ShouldSendSync(
 				elevConfig.NodeID,
 				oldNextNodeID,
@@ -105,7 +156,7 @@ func main() {
 			oldNextDied := slices.Contains(newPeerList.Lost, strconv.Itoa(oldNextNodeID))
 
 			if shouldSendSync {
-				syncTx <- network.FormatSyncMsg(
+				syncTxSecure <- network.FormatSyncMsg(
 					elevState.Orders,
 					elevState.NextNodeID,
 					elevState.NextNodeID,
@@ -116,7 +167,7 @@ func main() {
 					elevState,
 					elevConfig,
 					oldNextNodeID,
-					bidTx,
+					bidTxSecure,
 				)
 			}
 
@@ -125,10 +176,10 @@ func main() {
 				elevState,
 				elevConfig,
 				newOrder,
-				servedTx,
-				syncTx,
-				bidTx,
-				assignTx,
+				servedTxSecure,
+				syncTxSecure,
+				bidTxSecure,
+				assignTxSecure,
 				doorTimer,
 				floorTimer,
 			)
@@ -138,8 +189,8 @@ func main() {
 				elevState,
 				elevConfig,
 				newFloor,
-				servedTx,
-				syncTx,
+				servedTxSecure,
+				syncTxSecure,
 				doorTimer,
 				floorTimer,
 			)
@@ -156,8 +207,8 @@ func main() {
 			elevState = elev.HandleDoorTimeout(
 				elevState,
 				elevConfig,
-				servedTx,
-				syncTx,
+				servedTxSecure,
+				syncTxSecure,
 				doorTimer,
 				floorTimer,
 			)
@@ -168,7 +219,7 @@ func main() {
 				elevState,
 				elevConfig,
 				elevConfig.NodeID,
-				bidTx,
+				bidTxSecure,
 			)
 
 		case <-floorTimeout:
@@ -177,7 +228,7 @@ func main() {
 				elevState,
 				elevConfig,
 				elevConfig.NodeID,
-				bidTx,
+				bidTxSecure,
 			)
 
 		case bid := <-bidRx:
@@ -199,9 +250,11 @@ func main() {
 				bid.Header.Recipient = elevState.NextNodeID
 				bidTx <- bid
 			} else {
+				bidReplyReceived <- true
+
 				assignee := minTimeToServed(bid.Content.TimeToServed)
 
-				assignTx <- network.FormatAssignMsg(
+				assignTxSecure <- network.FormatAssignMsg(
 					bid.Content.Order,
 					assignee,
 					bid.Content.OldAssignee,
@@ -242,6 +295,8 @@ func main() {
 			if !isReply {
 				assign.Header.Recipient = elevState.NextNodeID
 				assignTx <- assign
+			} else {
+				assignReplyReceived <- true
 			}
 
 			if assign.Content.NewAssignee != elevConfig.NodeID {
@@ -258,8 +313,8 @@ func main() {
 				elevState,
 				elevConfig,
 				fsmOutput,
-				servedTx,
-				syncTx,
+				servedTxSecure,
+				syncTxSecure,
 				doorTimer,
 				floorTimer,
 			)
@@ -282,6 +337,8 @@ func main() {
 			if !isReply {
 				served.Header.Recipient = elevState.NextNodeID
 				servedTx <- served
+			} else {
+				servedReplyReceived <- true
 			}
 
 		case sync := <-syncRx:
@@ -304,8 +361,8 @@ func main() {
 					elevState,
 					elevConfig,
 					fsmOutput,
-					servedTx,
-					syncTx,
+					servedTxSecure,
+					syncTxSecure,
 					doorTimer,
 					floorTimer,
 				)
@@ -317,6 +374,8 @@ func main() {
 				sync.Header.Recipient = elevState.NextNodeID
 				sync.Content.Orders = elevState.Orders
 				syncTx <- sync
+			} else {
+				syncReplyReceived <- true
 			}
 
 		default:

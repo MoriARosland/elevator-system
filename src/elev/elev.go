@@ -161,7 +161,7 @@ func ReassignOrders(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	nodeID int,
-	bidTx chan types.Msg[types.Bid],
+	bidTxSecure chan types.Msg[types.Bid],
 ) {
 
 	for floor := range elevState.Orders[nodeID] {
@@ -176,7 +176,7 @@ func ReassignOrders(
 			}
 
 			fmt.Println("Reassigning order: ", order, " from ", nodeID)
-			bidTx <- network.FormatBidMsg(
+			bidTxSecure <- network.FormatBidMsg(
 				nil,
 				order,
 				nodeID,
