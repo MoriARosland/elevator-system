@@ -148,7 +148,7 @@ func main() {
 					continue
 				}
 
-				if !elevState.DoorObstr || !elevState.StuckBetweenFloors {
+				if !elevState.DoorObstr && !elevState.StuckBetweenFloors {
 					bidMsg.TimeToServed[elevConfig.NodeID] = fsm.TimeToOrderServed(
 						elevState,
 						elevConfig,
@@ -184,14 +184,6 @@ func main() {
 					continue
 				}
 
-				elevState = elev.SetOrderStatus(
-					elevState,
-					elevConfig,
-					assignMsg.NewAssignee,
-					assignMsg.Order,
-					true,
-				)
-
 				if assignMsg.OldAssignee != int(types.UNASSIGNED) {
 					elevState = elev.SetOrderStatus(
 						elevState,
@@ -201,6 +193,14 @@ func main() {
 						false,
 					)
 				}
+
+				elevState = elev.SetOrderStatus(
+					elevState,
+					elevConfig,
+					assignMsg.NewAssignee,
+					assignMsg.Order,
+					true,
+				)
 
 				/*
 				 * Make sure that the message is forwarded before updating
