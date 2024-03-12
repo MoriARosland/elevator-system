@@ -11,7 +11,7 @@ import (
 )
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 6
+const NUM_FLOORS = 4
 
 const DOOR_OPEN_DURATION = 3000
 const DOOR_OBSTR_TIMEOUT = 6000
