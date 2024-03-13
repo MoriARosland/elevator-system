@@ -1,10 +1,5 @@
 package types
 
-import (
-	"bytes"
-	"encoding/json"
-)
-
 type MsgTypes int
 
 const (
@@ -49,9 +44,8 @@ type Sync struct {
  * -> AuthorID must be btween 0 and 9
  */
 type Header struct {
-	Type        MsgTypes
-	AuthorID    int
-	LoopCounter int
+	AuthorID  int
+	Recipient int
 }
 
 type Content interface {
@@ -61,26 +55,4 @@ type Content interface {
 type Msg[T Content] struct {
 	Header  Header
 	Content T
-}
-
-/*
- * Parses message header and content to json separately in
- * order to retrieve content type from header upon msg receival
- */
-func (msg Msg[T]) ToJson() []byte {
-	encodedContent, err := json.Marshal(msg.Content)
-
-	if err != nil {
-		panic(err)
-	}
-
-	encodedHeader, err := json.Marshal(msg.Header)
-
-	if err != nil {
-		panic(err)
-	}
-
-	separator := []byte("")
-
-	return bytes.Join([][]byte{encodedHeader, encodedContent}, separator)
 }

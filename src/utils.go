@@ -11,20 +11,19 @@ import (
 /*
  * Parse command line arguments
  */
-func parseCommandlineFlags() (int, int, int, int) {
+func parseCommandlineFlags() (int, int, int) {
 	nodeID := flag.Int("id", -1, "Node id")
 	numNodes := flag.Int("num", -1, "Number of nodes")
-	baseBroadcastPort := flag.Int("bport", -1, "Base Broadcasting port")
 	elevServerPort := flag.Int("sport", -1, "Elevator server port")
 
 	flag.Parse()
 
-	if *nodeID < 0 || *numNodes < 0 || *baseBroadcastPort < 0 || *elevServerPort < 0 {
+	if *nodeID < 0 || *numNodes < 0 || *elevServerPort < 0 {
 		fmt.Println("Missing flags, use flag -h to see usage")
 		os.Exit(1)
 	}
 
-	return *nodeID, *numNodes, *baseBroadcastPort, *elevServerPort
+	return *nodeID, *numNodes, *elevServerPort
 }
 
 /*
@@ -46,9 +45,8 @@ func minTimeToServed(timeToServed []int) int {
 
 func printNextNode(elevState *types.ElevState, elevConfig *types.ElevConfig) {
 	fmt.Print("\033[2J\033[2;0H\r  ")
-	fmt.Printf("ID: %d | NextID: %d | NextAddr: %s \n",
+	fmt.Printf("ID: %d | NextID: %d \n\n",
 		elevConfig.NodeID,
-		elevState.NextNode.ID,
-		elevState.NextNode.Addr,
+		elevState.NextNodeID,
 	)
 }

@@ -2,6 +2,6 @@ go 1.21
 
 use (
 	./lib/driver-go-master/
-   ./lib/go-reuseport-0.4.0
+	./lib/network
 	./src
 )
