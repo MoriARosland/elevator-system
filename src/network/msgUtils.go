@@ -11,7 +11,12 @@ func FormatBidMsg(
 	NumNodes int,
 	recipient int,
 	author int,
+	loopCounter ...int,
 ) types.Msg[types.Bid] {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
 
 	if len(timeToServed) == 0 {
 		timeToServed = make([]int, NumNodes)
@@ -25,6 +30,7 @@ func FormatBidMsg(
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			LoopCounter: tempLoopCounter,
 		},
 		Content: types.Bid{
 			Order:        order,
@@ -42,12 +48,18 @@ func FormatAssignMsg(
 	oldAssignee int,
 	recipient int,
 	author int,
+	loopCounter ...int,
 ) types.Msg[types.Assign] {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
 
 	msg := types.Msg[types.Assign]{
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			LoopCounter: tempLoopCounter,
 		},
 		Content: types.Assign{
 			Order:       order,
@@ -63,12 +75,18 @@ func FormatServedMsg(
 	order types.Order,
 	recipient int,
 	author int,
+	loopCounter ...int,
 ) types.Msg[types.Served] {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
 
 	msg := types.Msg[types.Served]{
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			LoopCounter: tempLoopCounter,
 		},
 		Content: types.Served{
 			Order: order,
@@ -83,12 +101,18 @@ func FormatSyncMsg(
 	syncTarget int,
 	recipient int,
 	author int,
+	loopCounter ...int,
 ) types.Msg[types.Sync] {
+	tempLoopCounter := 0
+	if len(loopCounter) > 0 {
+		tempLoopCounter = loopCounter[0]
+	}
 
 	msg := types.Msg[types.Sync]{
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			LoopCounter: tempLoopCounter,
 		},
 		Content: types.Sync{
 			Orders:   orders,
