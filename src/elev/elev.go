@@ -164,6 +164,13 @@ func ReassignOrders(
 	bidTxSecure chan types.Msg[types.Bid],
 ) {
 
+	isAlone := elevState.NextNodeID == elevConfig.NodeID
+	disconnected := elevState.NextNodeID == -1
+
+	if isAlone || disconnected {
+		return
+	}
+
 	for floor := range elevState.Orders[nodeID] {
 		for orderType, orderStatus := range elevState.Orders[nodeID][floor] {
 			if !orderStatus || orderType == elevio.BT_Cab {
