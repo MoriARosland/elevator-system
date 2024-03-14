@@ -5,7 +5,6 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
-	"fmt"
 	"slices"
 	"strconv"
 )
@@ -59,8 +58,9 @@ func SetState(
 		}
 
 		isAlone := newState.NextNodeID == elevConfig.NodeID
+		disconnected := newState.NextNodeID == -1
 
-		if isAlone {
+		if isAlone || disconnected {
 			newState = *SetOrderStatus(
 				&newState,
 				elevConfig,
@@ -175,7 +175,6 @@ func ReassignOrders(
 				Floor:  floor,
 			}
 
-			fmt.Println("Reassigning order: ", order, " from ", nodeID)
 			bidTxSecure <- network.FormatBidMsg(
 				nil,
 				order,
@@ -250,6 +249,11 @@ func SetNextNodeID(
 	slices.Sort(peers)
 
 	indexOfNodeID := indexOf(peers, elevConfig.NodeID)
+
+	if len(peers) == 0 {
+		elevState.NextNodeID = -1
+		return elevState
+	}
 
 	if 0 > indexOfNodeID {
 		return elevState
