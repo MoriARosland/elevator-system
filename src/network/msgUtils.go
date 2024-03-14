@@ -1,8 +1,27 @@
 package network
 
 import (
+	"crypto/rand"
 	"elevator/types"
+	"fmt"
 )
+
+/*
+ * From stackoverflow:
+ * https://shorturl.at/bfxAI
+ */
+func pseudo_uuid() (uuid string) {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
+	}
+
+	uuid = fmt.Sprintf("%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+
+	return
+}
 
 func FormatBidMsg(
 	timeToServed []int,
@@ -25,6 +44,7 @@ func FormatBidMsg(
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			UUID:      pseudo_uuid(),
 		},
 		Content: types.Bid{
 			Order:        order,
@@ -48,6 +68,7 @@ func FormatAssignMsg(
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			UUID:      pseudo_uuid(),
 		},
 		Content: types.Assign{
 			Order:       order,
@@ -69,6 +90,7 @@ func FormatServedMsg(
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			UUID:      pseudo_uuid(),
 		},
 		Content: types.Served{
 			Order: order,
@@ -89,6 +111,7 @@ func FormatSyncMsg(
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
+			UUID:      pseudo_uuid(),
 		},
 		Content: types.Sync{
 			Orders:   orders,

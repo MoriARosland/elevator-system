@@ -49,7 +49,7 @@ func SetState(
 	 * Clear served orders
 	 */
 	for order, clearOrder := range stateChanges.ClearOrders {
-		if !clearOrder {
+		if !clearOrder || !newState.Orders[elevConfig.NodeID][newState.Floor][order] {
 			continue
 		}
 

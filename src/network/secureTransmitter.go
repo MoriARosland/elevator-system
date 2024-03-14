@@ -9,7 +9,7 @@ const REPLY_TIMEOUT = 300
 
 func SecureTransmitter[T types.Content](
 	setRecipient <-chan int,
-	replyReceived <-chan bool,
+	replyReceived <-chan string,
 	transmit chan<- types.Msg[T],
 	msg <-chan types.Msg[T],
 ) {
@@ -26,8 +26,14 @@ func SecureTransmitter[T types.Content](
 				msgBuffer[i].Header.Recipient = newRecipient
 			}
 
-		case <-replyReceived:
+		case replyId := <-replyReceived:
 			if len(msgBuffer) == 0 {
+				continue
+			}
+
+			validReply := replyId == msgBuffer[0].Header.UUID
+
+			if !validReply {
 				continue
 			}
 
