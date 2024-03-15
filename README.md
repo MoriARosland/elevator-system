@@ -12,7 +12,9 @@ The elevator system only runs on Unix-like operating systems, and requires an in
 
 [Simulator-v2](https://github.com/TTK4145/Simulator-v2) was used in development of this system, and is the recommended simulator to run the project.
 
-Install Simulator-v2 locally and follow the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator using the command from the readme. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
+Install Simulator-v2 locally by following the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator using the command from the readme. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
+
+To use Simulator-v2, see _Default keyboard controls_ from the [readme](https://github.com/TTK4145/Simulator-v2).
 
 Each elevator instance should be paired with an elevator-server (eg. simulator). This means connecting the elevator to the port of a server.
 
@@ -22,7 +24,7 @@ Required flags to run the program are:
 - -num: number of nodes (elevators) in the network.
 - -sport: which server-port the elevator should interface with.
 
-### Example: Starting a single elevator
+### Example
 
 Starting a 3-node elevator system should look something like this:
 
@@ -43,8 +45,6 @@ go run elevator -id 1 -num 3 -sport {server2-port}
 ```bash
 go run elevator -id 2 -num 3 -sport {server3-port}
 ```
-
-To use Simulator-v2, see [readme](https://github.com/TTK4145/Simulator-v2).
 
 ## Program Notes
 
