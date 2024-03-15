@@ -51,3 +51,7 @@ go run elevator -id 2 -num 3 -sport {server3-port}
 The program contains an elevator-state object (elevState), which serves the purpose of triggering FSM-updates at correct time with correct inputs.
 
 Methods using the elevState will always modify it _by reference_. This means no return object is necessary. In the code however, methods frequently return a pointer to the elevState. This is purely cosmetic to highlight when the elevState is updated.
+
+## Repository activity
+
+![Alt](https://repobeats.axiom.co/api/embed/3cdbb9e89645f822cf0bf49fa4132340888bee60.svg "Repobeats analytics image")
