@@ -2,75 +2,52 @@
 
 An elevator system with N elevators and M floors implemented in Go.
 
-The network topology of the system is circular, where data flows from one elevator to the next.
-
-## Program Notes
-
-**IMPORTANT: Program only runs on Go ^1.21.**
-
-The program contains a elevator-state object (elevState) containing all neccesarry information. This object is only modified by reference when calling functions, meaning no function return is neccassary.
-
-These functions do still return a pointer to the object, which functionally does nothing. The reason for this design is to clarify when an elevator-state object is modified.
-
-## Installation
-
-The elevator system only runs on Unix-like operating systems, and requires the elevator simulator from [Simulator-v2](https://github.com/TTK4145/Simulator-v2) to function correctly.
-
-Install Simulator-v2 locally and follow the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator with the given compile command. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
-
-Download the elevator-system with:
-
-```bash
-git clone https://github.com/MoriARosland/elevator-system.git
-```
-
-Cd to elevator-system and build the project with:
-
-```bash
-go build elevator
-```
-
-Create a Go folder in your /bin directory and add the build file there. If you are running on macOS, open a terminal and enter:
-
-```bash
-vim ~/.zshrc
-```
-
-Add the /bin/Go directroy to your PATH environment with:
-
-```zsh
-export PATH="${HOME}/bin/go:${PATH}"
-```
-
-Now you can start the elevator system on any terminal.
+The network topology emulates a circle, where data flows from one elevator to the next.
 
 ## Usage
 
-Each elevator instance requires a Simulator instance. After completing the installation, open a terminal window and run `SimElevatorServer --port {your port here}` to start a simulator.
+**IMPORTANT: Program only runs on Go ^1.21.**
 
-Open another terminal and enter `elevator -h`. This command lists alla required flags to start an elevator. The flags are:
+The elevator system only runs on Unix-like operating systems, and requires an interface to an elevator. This can be a physical device or a simulator.
+
+[Simulator-v2](https://github.com/TTK4145/Simulator-v2) was used in development of this system, and is the recommended simulator to run the project.
+
+Install Simulator-v2 locally by following the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator using the command from the readme. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
+
+To use Simulator-v2, see _Default keyboard controls_ from the [readme](https://github.com/TTK4145/Simulator-v2).
+
+Each elevator instance should be paired with an elevator-server (eg. simulator). This means connecting the elevator to the port of a server.
+
+Required flags to run the program are:
 
 - -id: node ID of the elevator (first elevator should be 0).
 - -num: number of nodes (elevators) in the network.
-- -bport: base-port for all elevators.
-- -sport: server-port, the port the Simulator is running on.
+- -sport: which server-port the elevator should interface with.
 
 ### Example
 
-Terminal 1:
+Starting a 3-node elevator system should look something like this:
+
+**Terminal 1:**
 
 ```bash
-SimElevatorServer --port 9090
+go run elevator -id 0 -num 3 -sport {server1-port}
 ```
 
-Terminal 2:
+**Terminal 2:**
 
 ```bash
-elevator -id 0 -num 3 -bport 8080 -sport 9090
+go run elevator -id 1 -num 3 -sport {server2-port}
 ```
 
-Repeat the commands above as many times as the -num flag. Remember to set -id, -sport and --port accordingly. This should yield a elevator system with 3 elevators and 4 floors. To use the Simulator, see the [readme](https://github.com/TTK4145/Simulator-v2).
+**Terminal 3:**
 
-## Repository activity
+```bash
+go run elevator -id 2 -num 3 -sport {server3-port}
+```
 
-![Alt](https://repobeats.axiom.co/api/embed/3cdbb9e89645f822cf0bf49fa4132340888bee60.svg "Repobeats analytics image")
+## Program Notes
+
+The program contains an elevator-state object (elevState), which serves the purpose of triggering FSM-updates at correct time with correct inputs.
+
+Methods using the elevState will always modify it _by reference_. This means no return object is necessary. In the code however, methods frequently return a pointer to the elevState. This is purely cosmetic to highlight when the elevState is updated.
