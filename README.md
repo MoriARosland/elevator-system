@@ -14,9 +14,11 @@ These functions do still return a pointer to the object, which functionally does
 
 ## Installation
 
-The elevator system only runs on Unix-like operating systems, and requires the elevator simulator from [Simulator-v2](https://github.com/TTK4145/Simulator-v2) to function correctly.
+The elevator system only runs on Unix-like operating systems, and requires an interface to an elevator. This can be a physical device or a simulator.
 
-Install Simulator-v2 locally and follow the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator with the given compile command. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
+[Simulator-v2](https://github.com/TTK4145/Simulator-v2) was used in development of this system, and is the recommended simulator to run the project.
+
+Install Simulator-v2 locally and follow the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator using the command from the readme. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
 
 Download the elevator-system with:
 
@@ -32,7 +34,7 @@ go build elevator
 
 ## Usage
 
-Each elevator instance requires a Simulator instance. After completing the installation, open a terminal window and run `SimElevatorServer --port {your port here}` to start a simulator.
+Each elevator instance should be paired with a Simulator instance. Open a terminal window and run `SimElevatorServer --port {your port here}` to start a simulator.
 
 Open another terminal and enter `elevator -h`. This command lists alla required flags to start an elevator. The flags are:
 
