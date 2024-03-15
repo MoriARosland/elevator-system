@@ -31,7 +31,6 @@ func FormatBidMsg(
 	recipient int,
 	author int,
 ) types.Msg[types.Bid] {
-
 	if len(timeToServed) == 0 {
 		timeToServed = make([]int, NumNodes)
 
@@ -45,6 +44,7 @@ func FormatBidMsg(
 			AuthorID:  author,
 			Recipient: recipient,
 			UUID:      pseudo_uuid(),
+			LoopCounter: 0,
 		},
 		Content: types.Bid{
 			Order:        order,
@@ -63,12 +63,12 @@ func FormatAssignMsg(
 	recipient int,
 	author int,
 ) types.Msg[types.Assign] {
-
 	msg := types.Msg[types.Assign]{
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
 			UUID:      pseudo_uuid(),
+			LoopCounter: 0,
 		},
 		Content: types.Assign{
 			Order:       order,
@@ -85,12 +85,12 @@ func FormatServedMsg(
 	recipient int,
 	author int,
 ) types.Msg[types.Served] {
-
 	msg := types.Msg[types.Served]{
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
 			UUID:      pseudo_uuid(),
+			LoopCounter: 0,
 		},
 		Content: types.Served{
 			Order: order,
@@ -106,12 +106,12 @@ func FormatSyncMsg(
 	recipient int,
 	author int,
 ) types.Msg[types.Sync] {
-
 	msg := types.Msg[types.Sync]{
 		Header: types.Header{
 			AuthorID:  author,
 			Recipient: recipient,
 			UUID:      pseudo_uuid(),
+			LoopCounter: 0,
 		},
 		Content: types.Sync{
 			Orders:   orders,

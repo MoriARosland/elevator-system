@@ -18,11 +18,11 @@ const BCAST_PORT = 16491
 const PEER_PORT = 17441
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 4
+const NUM_FLOORS = 6
 
-const DOOR_OPEN_DURATION = 3000
-const DOOR_OBSTR_TIMEOUT = 6000
-const FLOOR_ARRIVAL_TIMEOUT = 6000
+const DOOR_OPEN_DURATION = 3000 // ms
+const DOOR_OBSTR_TIMEOUT = 6000 // ms
+const FLOOR_ARRIVAL_TIMEOUT = 6000 // ms
 
 func main() {
 	nodeID, numNodes, elevServerPort := parseCommandlineFlags()
@@ -172,6 +172,7 @@ func main() {
 			}
 
 		case newOrder := <-drvButtons:
+
 			elevState = elev.HandleNewOrder(
 				elevState,
 				elevConfig,
@@ -246,8 +247,9 @@ func main() {
 				)
 			}
 
-			if !isReply {
+			if !isReply && bid.Header.LoopCounter < elevConfig.NumNodes {
 				bid.Header.Recipient = elevState.NextNodeID
+				bid.Header.LoopCounter += 1
 				bidTx <- bid
 			} else {
 				bidReplyReceived <- bid.Header.UUID
@@ -292,8 +294,9 @@ func main() {
 			 */
 			isReply := assign.Header.AuthorID == elevConfig.NodeID
 
-			if !isReply {
+			if !isReply && assign.Header.LoopCounter < elevConfig.NumNodes {
 				assign.Header.Recipient = elevState.NextNodeID
+				assign.Header.LoopCounter += 1
 				assignTx <- assign
 			} else {
 				assignReplyReceived <- assign.Header.UUID
@@ -314,7 +317,6 @@ func main() {
 				elevConfig,
 				fsmOutput,
 				servedTxSecure,
-				syncTxSecure,
 				doorTimer,
 				floorTimer,
 			)
@@ -334,8 +336,9 @@ func main() {
 
 			isReply := served.Header.AuthorID == elevConfig.NodeID
 
-			if !isReply {
+			if !isReply && served.Header.LoopCounter < elevConfig.NumNodes {
 				served.Header.Recipient = elevState.NextNodeID
+				served.Header.LoopCounter += 1
 				servedTx <- served
 			} else {
 				servedReplyReceived <- served.Header.UUID
@@ -362,7 +365,6 @@ func main() {
 					elevConfig,
 					fsmOutput,
 					servedTxSecure,
-					syncTxSecure,
 					doorTimer,
 					floorTimer,
 				)
@@ -370,8 +372,9 @@ func main() {
 
 			isReply := sync.Header.AuthorID == elevConfig.NodeID
 
-			if !isReply {
+			if !isReply && sync.Header.LoopCounter < elevConfig.NumNodes {
 				sync.Header.Recipient = elevState.NextNodeID
+				sync.Header.LoopCounter += 1
 				sync.Content.Orders = elevState.Orders
 				syncTx <- sync
 			} else {

@@ -47,6 +47,7 @@ type Header struct {
 	AuthorID  int
 	Recipient int
 	UUID      string
+	LoopCounter int
 }
 
 type Content interface {

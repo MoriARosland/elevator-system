@@ -103,7 +103,6 @@ func HandleFloorArrival(
 		elevConfig,
 		fsmOutput,
 		servedTxSecure,
-		syncTxSecure,
 		doorTimer,
 		floorTimer,
 	)
@@ -137,7 +136,6 @@ func HandleDoorTimeout(
 		elevConfig,
 		fsmOutput,
 		servedTxSecure,
-		syncTxSecure,
 		doorTimer,
 		floorTimer,
 	)
