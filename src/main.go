@@ -18,7 +18,7 @@ const BCAST_PORT = 16491
 const PEER_PORT = 17441
 
 const NUM_BUTTONS = 3
-const NUM_FLOORS = 6
+const NUM_FLOORS = 4
 
 const DOOR_OPEN_DURATION = 3000 // ms
 const DOOR_OBSTR_TIMEOUT = 6000 // ms
