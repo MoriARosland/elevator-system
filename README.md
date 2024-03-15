@@ -8,9 +8,9 @@ The network topology of the system is circular, where data flows from one elevat
 
 **IMPORTANT: Program only runs on Go ^1.21.**
 
-The program contains a elevator-state object (elevState) containing all neccesarry information. This object is only modified by reference when calling functions, meaning no function return is neccassary.
+The program contains an elevator-state object (elevState), which serves the purpose of triggering FSM-updates at correct time with correct inputs.
 
-These functions do still return a pointer to the object, which functionally does nothing. The reason for this design is to clarify when an elevator-state object is modified.
+Methods using the elevState will always modify it _by reference_. This means no return object is necessary. In the code however, methods frequently return a pointer to the elevState. This is purely cosmetic to highlight when the elevState is updated.
 
 ## Installation
 
@@ -20,44 +20,49 @@ The elevator system only runs on Unix-like operating systems, and requires an in
 
 Install Simulator-v2 locally and follow the readme. If you are running macOS Sonoma, you will likely encounter a linker error when compiling the simulator using the command from the readme. A quick fix can be retreived from [here](https://forum.dlang.org/thread/jwmpdecwyazcrxphttoy@forum.dlang.org).
 
-Download the elevator-system with:
-
-```bash
-git clone https://github.com/MoriARosland/elevator-system.git
-```
-
-Cd to elevator-system and build the project with:
-
-```bash
-go build elevator
-```
+Clone the repository, cd to the project, and use `go build elevator` from the terminal to build the program.
 
 ## Usage
 
-Each elevator instance should be paired with a Simulator instance. Open a terminal window and run `SimElevatorServer --port {your port here}` to start a simulator.
+Each elevator instance should be paired with an elevator-server (eg. simulator). This means connecting the elevator to the port of a server.
 
-Open another terminal and enter `elevator -h`. This command lists alla required flags to start an elevator. The flags are:
+Open the terminal from the root of the project, and enter `elevator -h`. This command lists the required flags to start an elevator-instance. The flags are:
 
 - -id: node ID of the elevator (first elevator should be 0).
 - -num: number of nodes (elevators) in the network.
-- -bport: base-port for all elevators.
-- -sport: server-port, the port the Simulator is running on.
+- -sport: which server-port the elevator should interface with.
 
-### Example
+### Example 1: Starting a single elevator
 
-Terminal 1:
+1. From the root of the project, build the program with: `go build elevator`.
+2. Start a elevator-server (eg. simulator) and note which port to connect to.
+3. Start a single elevator instance with: `elevator -id 0 -num 1 -sport 8080`.
+
+### Example 2: Starting multiple elevators
+
+Repeat the steps from example 1, but increment -id and set corresponding -sport for each new elevator instance.
+
+Starting a 3-node elevator system should look something like this:
+
+**Terminal 1:**
 
 ```bash
-SimElevatorServer --port 9090
+elevator -num 3 -id 0 -sport {server1-port}
 ```
 
-Terminal 2:
+**Terminal 2:**
 
 ```bash
-elevator -id 0 -num 3 -bport 8080 -sport 9090
+elevator -num 3 -id 1 -sport {server2-port}
 ```
 
-Repeat the commands above as many times as the -num flag. Remember to set -id, -sport and --port accordingly. This should yield a elevator system with 3 elevators and 4 floors. To use the Simulator, see the [readme](https://github.com/TTK4145/Simulator-v2).
+**Terminal 3:**
+
+```bash
+elevator -num 3 -id 2 -sport {server3-port}
+```
+
+To use the Simulator-v2, see the [readme](https://github.com/TTK4145/Simulator-v2).
 
 ## Repository activity
 
