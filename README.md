@@ -30,20 +30,6 @@ Cd to elevator-system and build the project with:
 go build elevator
 ```
 
-Create a Go folder in your /bin directory and add the build file there. If you are running on macOS, open a terminal and enter:
-
-```bash
-vim ~/.zshrc
-```
-
-Add the /bin/Go directroy to your PATH environment with:
-
-```zsh
-export PATH="${HOME}/bin/go:${PATH}"
-```
-
-Now you can start the elevator system on any terminal.
-
 ## Usage
 
 Each elevator instance requires a Simulator instance. After completing the installation, open a terminal window and run `SimElevatorServer --port {your port here}` to start a simulator.
