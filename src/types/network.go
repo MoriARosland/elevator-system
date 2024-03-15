@@ -46,6 +46,7 @@ type Sync struct {
 type Header struct {
 	AuthorID  int
 	Recipient int
+	UUID      string
 	LoopCounter int
 }
 

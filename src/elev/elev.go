@@ -5,7 +5,6 @@ import (
 	"elevator/fsm"
 	"elevator/network"
 	"elevator/types"
-	"fmt"
 	"slices"
 	"strconv"
 )
@@ -48,7 +47,7 @@ func SetState(
 	 * Clear served orders
 	 */
 	for order, clearOrder := range stateChanges.ClearOrders {
-		if !clearOrder {
+		if !clearOrder || !newState.Orders[elevConfig.NodeID][newState.Floor][order] {
 			continue
 		}
 
@@ -58,8 +57,9 @@ func SetState(
 		}
 
 		isAlone := newState.NextNodeID == elevConfig.NodeID
+		disconnected := newState.NextNodeID == -1
 
-		if isAlone {
+		if isAlone || disconnected {
 			newState = *SetOrderStatus(
 				&newState,
 				elevConfig,
@@ -163,6 +163,13 @@ func ReassignOrders(
 	bidTxSecure chan types.Msg[types.Bid],
 ) {
 
+	isAlone := elevState.NextNodeID == elevConfig.NodeID
+	disconnected := elevState.NextNodeID == -1
+
+	if isAlone || disconnected {
+		return
+	}
+
 	for floor := range elevState.Orders[nodeID] {
 		for orderType, orderStatus := range elevState.Orders[nodeID][floor] {
 			if !orderStatus || orderType == elevio.BT_Cab {
@@ -174,7 +181,6 @@ func ReassignOrders(
 				Floor:  floor,
 			}
 
-			fmt.Println("Reassigning order: ", order, " from ", nodeID)
 			bidTxSecure <- network.FormatBidMsg(
 				nil,
 				order,
@@ -248,6 +254,11 @@ func SetNextNodeID(
 	slices.Sort(peers)
 
 	indexOfNodeID := indexOf(peers, elevConfig.NodeID)
+
+	if len(peers) == 0 {
+		elevState.NextNodeID = -1
+		return elevState
+	}
 
 	if 0 > indexOfNodeID {
 		return elevState

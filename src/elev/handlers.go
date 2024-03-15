@@ -21,8 +21,9 @@ func HandleNewOrder(
 
 	isCabOrder := order.Button == elevio.BT_Cab
 	isAlone := elevState.NextNodeID == elevConfig.NodeID
+	disconnected := elevState.NextNodeID == -1
 
-	if isAlone && isCabOrder {
+	if (isAlone || disconnected) && isCabOrder {
 		elevState = SelfAssignOrder(
 			elevState,
 			elevConfig,
@@ -32,7 +33,7 @@ func HandleNewOrder(
 			doorTimer,
 			floorTimer,
 		)
-	} else if !isAlone && isCabOrder {
+	} else if !isAlone && !disconnected && isCabOrder {
 		assignTxSecure <- network.FormatAssignMsg(
 			order,
 			elevConfig.NodeID,
@@ -40,7 +41,7 @@ func HandleNewOrder(
 			elevState.NextNodeID,
 			elevConfig.NodeID,
 		)
-	} else {
+	} else if !disconnected {
 		bidTxSecure <- network.FormatBidMsg(
 			nil,
 			order,

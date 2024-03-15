@@ -47,7 +47,7 @@ func main() {
 	bidRx := make(chan types.Msg[types.Bid])
 
 	bidSetRecipient := make(chan int)
-	bidReplyReceived := make(chan bool)
+	bidReplyReceived := make(chan string)
 	bidTxSecure := make(chan types.Msg[types.Bid])
 
 	go network.SecureTransmitter[types.Bid](
@@ -61,7 +61,7 @@ func main() {
 	assignRx := make(chan types.Msg[types.Assign])
 
 	assignSetRecipient := make(chan int)
-	assignReplyReceived := make(chan bool)
+	assignReplyReceived := make(chan string)
 	assignTxSecure := make(chan types.Msg[types.Assign])
 
 	go network.SecureTransmitter[types.Assign](
@@ -75,7 +75,7 @@ func main() {
 	servedRx := make(chan types.Msg[types.Served])
 
 	servedSetRecipient := make(chan int)
-	servedReplyReceived := make(chan bool)
+	servedReplyReceived := make(chan string)
 	servedTxSecure := make(chan types.Msg[types.Served])
 
 	go network.SecureTransmitter[types.Served](
@@ -89,7 +89,7 @@ func main() {
 	syncRx := make(chan types.Msg[types.Sync])
 
 	syncSetRecipient := make(chan int)
-	syncReplyReceived := make(chan bool)
+	syncReplyReceived := make(chan string)
 	syncTxSecure := make(chan types.Msg[types.Sync])
 
 	go network.SecureTransmitter[types.Sync](
@@ -252,7 +252,7 @@ func main() {
 				bid.Header.LoopCounter += 1
 				bidTx <- bid
 			} else {
-				bidReplyReceived <- true
+				bidReplyReceived <- bid.Header.UUID
 
 				assignee := minTimeToServed(bid.Content.TimeToServed)
 
@@ -299,7 +299,7 @@ func main() {
 				assign.Header.LoopCounter += 1
 				assignTx <- assign
 			} else {
-				assignReplyReceived <- true
+				assignReplyReceived <- assign.Header.UUID
 			}
 
 			if assign.Content.NewAssignee != elevConfig.NodeID {
@@ -341,7 +341,7 @@ func main() {
 				served.Header.LoopCounter += 1
 				servedTx <- served
 			} else {
-				servedReplyReceived <- true
+				servedReplyReceived <- served.Header.UUID
 			}
 
 		case sync := <-syncRx:
@@ -378,7 +378,7 @@ func main() {
 				sync.Content.Orders = elevState.Orders
 				syncTx <- sync
 			} else {
-				syncReplyReceived <- true
+				syncReplyReceived <- sync.Header.UUID
 			}
 
 		default:
