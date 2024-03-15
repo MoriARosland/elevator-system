@@ -43,12 +43,16 @@ func main() {
 	obstrTimeout, obstrTimer := timer.New(DOOR_OBSTR_TIMEOUT * time.Millisecond)
 	floorTimeout, floorTimer := timer.New(FLOOR_ARRIVAL_TIMEOUT * time.Millisecond)
 
+	/*
+	 * Setup network communication channels
+	 */
+
 	bidTx := make(chan types.Msg[types.Bid])
+	bidTxSecure := make(chan types.Msg[types.Bid])
 	bidRx := make(chan types.Msg[types.Bid])
 
 	bidSetRecipient := make(chan int)
 	bidReplyReceived := make(chan string)
-	bidTxSecure := make(chan types.Msg[types.Bid])
 
 	go network.SecureTransmitter[types.Bid](
 		bidSetRecipient,
@@ -59,10 +63,10 @@ func main() {
 
 	assignTx := make(chan types.Msg[types.Assign])
 	assignRx := make(chan types.Msg[types.Assign])
+	assignTxSecure := make(chan types.Msg[types.Assign])
 
 	assignSetRecipient := make(chan int)
 	assignReplyReceived := make(chan string)
-	assignTxSecure := make(chan types.Msg[types.Assign])
 
 	go network.SecureTransmitter[types.Assign](
 		assignSetRecipient,
@@ -73,10 +77,10 @@ func main() {
 
 	servedTx := make(chan types.Msg[types.Served])
 	servedRx := make(chan types.Msg[types.Served])
+	servedTxSecure := make(chan types.Msg[types.Served])
 
 	servedSetRecipient := make(chan int)
 	servedReplyReceived := make(chan string)
-	servedTxSecure := make(chan types.Msg[types.Served])
 
 	go network.SecureTransmitter[types.Served](
 		servedSetRecipient,
@@ -87,10 +91,10 @@ func main() {
 
 	syncTx := make(chan types.Msg[types.Sync])
 	syncRx := make(chan types.Msg[types.Sync])
+	syncTxSecure := make(chan types.Msg[types.Sync])
 
 	syncSetRecipient := make(chan int)
 	syncReplyReceived := make(chan string)
-	syncTxSecure := make(chan types.Msg[types.Sync])
 
 	go network.SecureTransmitter[types.Sync](
 		syncSetRecipient,
@@ -131,25 +135,34 @@ func main() {
 		elevState,
 		elevConfig,
 		fsmOutput,
-		servedTxSecure,
 		doorTimer,
 		floorTimer,
+	)
+
+	elevState = elev.ClearOrdersAtFloor(
+		elevState,
+		elevConfig,
+		fsmOutput.ClearOrders,
+		servedTxSecure,
 	)
 
 	if !fsmOutput.SetMotor && oldFloor != -1 {
 		floorTimer <- types.START
 	}
 
+	/*
+	 * After setup is complete: start "I'm alive" broadcasting
+	 */
 	peerUpdate := make(chan peers.PeerUpdate)
-	peerTxEnable := make(chan bool)
 
-	go peers.Transmitter(PEER_PORT, strconv.Itoa(elevConfig.NodeID), peerTxEnable)
+	go peers.Transmitter(PEER_PORT, strconv.Itoa(elevConfig.NodeID), nil)
 	go peers.Receiver(PEER_PORT, peerUpdate)
 
 	for {
 		select {
 		case newPeerList := <-peerUpdate:
 			oldNextNodeID := elevState.NextNodeID
+
 			elevState = elev.SetNextNodeID(
 				elevState,
 				elevConfig,
@@ -173,6 +186,7 @@ func main() {
 			)
 
 			oldNextDied := slices.Contains(newPeerList.Lost, strconv.Itoa(oldNextNodeID))
+			disconnected := elevState.NextNodeID == -1
 
 			if shouldSendSync {
 				syncTxSecure <- network.FormatSyncMsg(
@@ -181,7 +195,7 @@ func main() {
 					elevState.NextNodeID,
 					elevConfig.NodeID,
 				)
-			} else if oldNextDied {
+			} else if oldNextDied && !disconnected {
 				elev.ReassignOrders(
 					elevState,
 					elevConfig,
@@ -192,17 +206,34 @@ func main() {
 
 		case newOrder := <-drvButtons:
 			isCabOrder := newOrder.Button == elevio.BT_Cab
+
 			isAlone := elevState.NextNodeID == elevConfig.NodeID
 			disconnected := elevState.NextNodeID == -1
 
 			if (isAlone || disconnected) && isCabOrder {
-				elevState = elev.SelfAssignOrder(
+				elevState = elev.SetOrderStatus(
 					elevState,
 					elevConfig,
+					elevConfig.NodeID,
 					newOrder,
-					servedTxSecure,
+					true,
+				)
+
+				fsmOutput := fsm.OnOrderAssigned(newOrder, elevState, elevConfig)
+
+				elevState = elev.SetState(
+					elevState,
+					elevConfig,
+					fsmOutput,
 					doorTimer,
 					floorTimer,
+				)
+
+				elevState = elev.ClearOrdersAtFloor(
+					elevState,
+					elevConfig,
+					fsmOutput.ClearOrders,
+					servedTxSecure,
 				)
 			} else if !isAlone && !disconnected && isCabOrder {
 				assignTxSecure <- network.FormatAssignMsg(
@@ -238,9 +269,15 @@ func main() {
 				elevState,
 				elevConfig,
 				fsmOutput,
-				servedTxSecure,
 				doorTimer,
 				floorTimer,
+			)
+
+			elevState = elev.ClearOrdersAtFloor(
+				elevState,
+				elevConfig,
+				fsmOutput.ClearOrders,
+				servedTxSecure,
 			)
 
 			if !fsmOutput.SetMotor && oldFloor != -1 {
@@ -275,13 +312,26 @@ func main() {
 				elevState,
 				elevConfig,
 				fsmOutput,
-				servedTxSecure,
 				doorTimer,
 				floorTimer,
 			)
 
+			elevState = elev.ClearOrdersAtFloor(
+				elevState,
+				elevConfig,
+				fsmOutput.ClearOrders,
+				servedTxSecure,
+			)
+
 		case <-obstrTimeout:
 			obstrTimer <- types.STOP
+
+			disconnected := elevState.NextNodeID == -1
+
+			if disconnected {
+				continue
+			}
+
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
@@ -291,6 +341,13 @@ func main() {
 
 		case <-floorTimeout:
 			elevState.StuckBetweenFloors = true
+
+			disconnected := elevState.NextNodeID == -1
+
+			if disconnected {
+				continue
+			}
+
 			elev.ReassignOrders(
 				elevState,
 				elevConfig,
@@ -354,10 +411,6 @@ func main() {
 				true,
 			)
 
-			/*
-			 * Make sure that the message is forwarded before updating
-			 * state in case the order is to be cleared immediately
-			 */
 			isReply := assign.Header.AuthorID == elevConfig.NodeID
 
 			if !isReply && assign.Header.LoopCounter < elevConfig.NumNodes {
@@ -382,9 +435,15 @@ func main() {
 				elevState,
 				elevConfig,
 				fsmOutput,
-				servedTxSecure,
 				doorTimer,
 				floorTimer,
+			)
+
+			elevState = elev.ClearOrdersAtFloor(
+				elevState,
+				elevConfig,
+				fsmOutput.ClearOrders,
+				servedTxSecure,
 			)
 
 		case served := <-servedRx:
@@ -415,7 +474,7 @@ func main() {
 				continue
 			}
 
-			elevState = elev.OnSync(
+			elevState = elev.MergeOrderLists(
 				elevState,
 				elevConfig,
 				sync.Content.Orders,
@@ -430,9 +489,15 @@ func main() {
 					elevState,
 					elevConfig,
 					fsmOutput,
-					servedTxSecure,
 					doorTimer,
 					floorTimer,
+				)
+
+				elevState = elev.ClearOrdersAtFloor(
+					elevState,
+					elevConfig,
+					fsmOutput.ClearOrders,
+					servedTxSecure,
 				)
 			}
 

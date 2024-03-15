@@ -15,7 +15,7 @@ const REPLY_TIMEOUT = 300
 func SecureTransmitter[T types.Content](
 	setRecipient <-chan int,
 	replyReceived <-chan string,
-	transmit chan<- types.Msg[T],
+	msgTx chan<- types.Msg[T],
 	msg <-chan types.Msg[T],
 ) {
 
@@ -49,20 +49,20 @@ func SecureTransmitter[T types.Content](
 				continue
 			}
 
-			transmit <- msgBuffer[0]
+			msgTx <- msgBuffer[0]
 			replyTimeout.Reset(REPLY_TIMEOUT * time.Millisecond)
 
 		case newMsg := <-msg:
 			msgBuffer = append(msgBuffer, newMsg)
 
 			if len(msgBuffer) == 1 {
-				transmit <- msgBuffer[0]
+				msgTx <- msgBuffer[0]
 				replyTimeout = time.NewTicker(REPLY_TIMEOUT * time.Millisecond)
 			}
 
 		case <-replyTimeout.C:
 			if len(msgBuffer) > 0 {
-				transmit <- msgBuffer[0]
+				msgTx <- msgBuffer[0]
 			}
 		}
 	}
