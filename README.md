@@ -29,7 +29,7 @@ Starting a 3-node elevator system should look something like this:
 **Terminal 1:**
 
 ```bash
-go run elevator  -id 0 -num 3 -sport {server1-port}
+go run elevator -id 0 -num 3 -sport {server1-port}
 ```
 
 **Terminal 2:**
