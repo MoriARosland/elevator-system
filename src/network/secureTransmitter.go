@@ -7,6 +7,11 @@ import (
 
 const REPLY_TIMEOUT = 300
 
+/*
+ * Ensures messages are not lost in the event of network errors:
+ * - Sends messages in the message buffer and waits for a reply
+ * - Resends if no reply is received within a timeout
+ */
 func SecureTransmitter[T types.Content](
 	setRecipient <-chan int,
 	replyReceived <-chan string,

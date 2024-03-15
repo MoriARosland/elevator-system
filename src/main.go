@@ -102,6 +102,9 @@ func main() {
 	go bcast.Transmitter(BCAST_PORT, bidTx, assignTx, servedTx, syncTx)
 	go bcast.Receiver(BCAST_PORT, bidRx, assignRx, servedRx, syncRx)
 
+	/*
+	 * In case we start between two floors; choose a direction
+	 */
 	if 0 > elevio.GetFloor() {
 		elevio.SetMotorDirection(elevio.MD_Down)
 		elevState.Dirn = elevio.MD_Down
@@ -109,17 +112,33 @@ func main() {
 		floorTimer <- types.START
 	}
 
+	/*
+	 * Wait until we know which floor we are on
+	 */
 	newFloor := <-drvFloors
 
-	elevState = elev.HandleFloorArrival(
+	oldFloor := elevState.Floor
+
+	elevState.Floor = newFloor
+	elevio.SetFloorIndicator(newFloor)
+
+	floorTimer <- types.STOP
+	elevState.StuckBetweenFloors = false
+
+	fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
+
+	elevState = elev.SetState(
 		elevState,
 		elevConfig,
-		newFloor,
-		servedTx,
-		syncTx,
+		fsmOutput,
+		servedTxSecure,
 		doorTimer,
 		floorTimer,
 	)
+
+	if !fsmOutput.SetMotor && oldFloor != -1 {
+		floorTimer <- types.START
+	}
 
 	peerUpdate := make(chan peers.PeerUpdate)
 	peerTxEnable := make(chan bool)
@@ -172,44 +191,91 @@ func main() {
 			}
 
 		case newOrder := <-drvButtons:
+			isCabOrder := newOrder.Button == elevio.BT_Cab
+			isAlone := elevState.NextNodeID == elevConfig.NodeID
+			disconnected := elevState.NextNodeID == -1
 
-			elevState = elev.HandleNewOrder(
-				elevState,
-				elevConfig,
-				newOrder,
-				servedTxSecure,
-				syncTxSecure,
-				bidTxSecure,
-				assignTxSecure,
-				doorTimer,
-				floorTimer,
-			)
+			if (isAlone || disconnected) && isCabOrder {
+				elevState = elev.SelfAssignOrder(
+					elevState,
+					elevConfig,
+					newOrder,
+					servedTxSecure,
+					doorTimer,
+					floorTimer,
+				)
+			} else if !isAlone && !disconnected && isCabOrder {
+				assignTxSecure <- network.FormatAssignMsg(
+					newOrder,
+					elevConfig.NodeID,
+					int(types.UNASSIGNED),
+					elevState.NextNodeID,
+					elevConfig.NodeID,
+				)
+			} else if !disconnected {
+				bidTxSecure <- network.FormatBidMsg(
+					nil,
+					newOrder,
+					int(types.UNASSIGNED),
+					elevConfig.NumNodes,
+					elevState.NextNodeID,
+					elevConfig.NodeID,
+				)
+			}
 
 		case newFloor := <-drvFloors:
-			elevState = elev.HandleFloorArrival(
+			oldFloor := elevState.Floor
+
+			elevState.Floor = newFloor
+			elevio.SetFloorIndicator(newFloor)
+
+			floorTimer <- types.STOP
+			elevState.StuckBetweenFloors = false
+
+			fsmOutput := fsm.OnFloorArrival(elevState, elevConfig)
+
+			elevState = elev.SetState(
 				elevState,
 				elevConfig,
-				newFloor,
+				fsmOutput,
 				servedTxSecure,
-				syncTxSecure,
 				doorTimer,
 				floorTimer,
 			)
 
+			if !fsmOutput.SetMotor && oldFloor != -1 {
+				floorTimer <- types.START
+			}
+
 		case isObstructed := <-drvObstr:
-			elevState = elev.HandleDoorObstr(
-				elevState,
-				isObstructed,
-				obstrTimer,
-				doorTimer,
-			)
+			if elevState.DoorObstr == isObstructed {
+				continue
+			}
+
+			if isObstructed {
+				obstrTimer <- types.START
+			} else {
+				obstrTimer <- types.STOP
+			}
+
+			doorTimer <- types.START
+			elevState.DoorObstr = isObstructed
+
 
 		case <-doorTimeout:
-			elevState = elev.HandleDoorTimeout(
+			if elevState.DoorObstr {
+				doorTimer <- types.START
+				continue
+			}
+			doorTimer <- types.STOP
+
+			fsmOutput := fsm.OnDoorTimeout(elevState, elevConfig)
+
+			elevState = elev.SetState(
 				elevState,
 				elevConfig,
+				fsmOutput,
 				servedTxSecure,
-				syncTxSecure,
 				doorTimer,
 				floorTimer,
 			)

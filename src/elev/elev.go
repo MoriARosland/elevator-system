@@ -16,7 +16,9 @@ func SetState(
 	oldState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	stateChanges types.FsmOutput,
+
 	servedTx chan types.Msg[types.Served],
+
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -197,8 +199,9 @@ func SelfAssignOrder(
 	elevState *types.ElevState,
 	elevConfig *types.ElevConfig,
 	order types.Order,
-	servedTx chan types.Msg[types.Served],
-	syncTx chan types.Msg[types.Sync],
+
+	servedTxSecure chan types.Msg[types.Served],
+	
 	doorTimer chan<- types.TimerActions,
 	floorTimer chan<- types.TimerActions,
 ) *types.ElevState {
@@ -216,7 +219,7 @@ func SelfAssignOrder(
 		elevState,
 		elevConfig,
 		fsmOutput,
-		servedTx,
+		servedTxSecure,
 		doorTimer,
 		floorTimer,
 	)

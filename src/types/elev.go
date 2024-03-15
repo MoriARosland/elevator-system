@@ -10,7 +10,6 @@ type ElevConfig struct {
 	NumFloors        int
 	NumButtons       int
 	DoorOpenDuration int
-	BroadcastPort    int
 }
 
 type ElevState struct {
