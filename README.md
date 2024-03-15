@@ -2,7 +2,7 @@
 
 An elevator system with N elevators and M floors implemented in Go.
 
-The network topology of the system is circular, where data flows from one elevator to the next.
+The network topology emulates a circle, where data flows from one elevator to the next.
 
 ## Usage
 
