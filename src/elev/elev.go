@@ -165,10 +165,9 @@ func ReassignOrders(
 	bidTxSecure chan types.Msg[types.Bid],
 ) {
 
-	isAlone := elevState.NextNodeID == elevConfig.NodeID
 	disconnected := elevState.NextNodeID == -1
 
-	if isAlone || disconnected {
+	if disconnected {
 		return
 	}
 
